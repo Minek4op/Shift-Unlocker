@@ -1,0 +1,25 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net11.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>app.ico</ApplicationIcon>
+    <NoWarn>$(NoWarn);WFO1000</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="app.png" />
+    <EmbeddedResource Include="app.ico" />
+    <EmbeddedResource Include="EmbeddedTools\**\*" />
+    <EmbeddedResource Include="EmbeddedSystem\sethc.exe" />
+    <EmbeddedResource Include="EmbeddedSystem\Utilman.exe" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ShiftUnlocker.Native\ShiftUnlocker.Native.csproj" />
+    <ProjectReference Include="..\ShiftUnlocker.Core\ShiftUnlocker.Core.csproj" />
+  </ItemGroup>
+</Project>
