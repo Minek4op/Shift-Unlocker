@@ -17,6 +17,7 @@ public class QuickScanView : UserControl
 
     private readonly QuickScanService _scanService = new();
     private List<ScanFinding> _currentFindings = new();
+    private bool _hasScannedOnce;
 
     public Func<ITargetContext>? GetContext { get; set; }
     public Func<BackupManager>? GetBackupManager { get; set; }
@@ -102,10 +103,25 @@ public class QuickScanView : UserControl
         _btnFixAll.Enabled = isAdmin;
     }
 
+    public void ResetScanState()
+    {
+        _hasScannedOnce = false;
+    }
+
+    public async Task EnsureScannedOnceAsync()
+    {
+        if (_hasScannedOnce && _currentFindings.Count > 0) return;
+        if (_hasScannedOnce) return;
+        _hasScannedOnce = true;
+        await RunScanAsync();
+    }
+
     public async Task RunScanAsync()
     {
         var ctx = GetContext?.Invoke();
         if (ctx == null) return;
+
+        _hasScannedOnce = true;
 
         _btnScan.Enabled = false;
         _progressBar.Visible = true;

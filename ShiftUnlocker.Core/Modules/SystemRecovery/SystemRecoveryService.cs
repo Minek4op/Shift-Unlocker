@@ -283,45 +283,31 @@ public class SystemRecoveryService
         return Result.Ok();
     }
 
-    public Result RestoreAccessibilityFilesFromEmbedded(ITargetContext ctx, BackupManager bm, Assembly? resourceAssembly = null)
+    public Result RestoreAccessibilityFilesFromWinSxS(ITargetContext ctx, BackupManager bm)
     {
-        var asm = resourceAssembly ?? Assembly.GetEntryAssembly();
-        if (asm == null) return Result.Fail("Не найдена сборка со встроенными файлами.");
-
         // сначала чистим IFEO
         bm.BackupAndDeleteRegistryValue(ctx, "HKLM", $@"{IfeoBase}\sethc.exe", "Debugger", "Removed sethc.exe IFEO Debugger");
         bm.BackupAndDeleteRegistryValue(ctx, "HKLM", $@"{IfeoBase}\utilman.exe", "Debugger", "Removed utilman.exe IFEO Debugger");
 
         string sys32 = ctx.System32Directory;
+        string winSxS = Path.Combine(ctx.WindowsDirectory, "WinSxS");
         var fileMgr = new FileManagerService();
         var errors = new List<string>();
         int restoredCount = 0;
 
-        var targets = new (string ResourceSuffix, string FileName)[]
+        string[] targets = ["sethc.exe", "Utilman.exe"];
+        foreach (var fileName in targets)
         {
-            (".EmbeddedSystem.sethc.exe", "sethc.exe"),
-            (".EmbeddedSystem.Utilman.exe", "Utilman.exe")
-        };
-
-        string[] allRes = asm.GetManifestResourceNames();
-
-        foreach (var (suffix, fileName) in targets)
-        {
-            string? resName = allRes.FirstOrDefault(r => r.EndsWith(suffix, StringComparison.OrdinalIgnoreCase));
-            if (resName == null)
-            {
-                errors.Add($"Встроенный ресурс {fileName} не найден");
-                continue;
-            }
-
-            using var stream = asm.GetManifestResourceStream(resName);
-            if (stream == null)
-            {
-                errors.Add($"Не удалось открыть поток ресурса {fileName}");
-                continue;
-            }
-
             string destPath = Path.Combine(sys32, fileName);
+            string bakPath = destPath + ".bak";
+            string? sourcePath = File.Exists(bakPath) ? bakPath : FindInWinSxS(winSxS, fileName);
+
+            if (sourcePath == null || !File.Exists(sourcePath))
+            {
+                errors.Add($"{fileName}: не найден ни .bak, ни эталон в WinSxS");
+                continue;
+            }
+
             try
             {
                 if (File.Exists(destPath))
@@ -333,10 +319,13 @@ public class SystemRecoveryService
                     try { File.SetAttributes(destPath, FileAttributes.Normal); } catch { }
                 }
 
-                using var fs = new FileStream(destPath, FileMode.Create, FileAccess.Write, FileShare.None);
-                stream.CopyTo(fs);
+                File.Copy(sourcePath, destPath, true);
+                if (string.Equals(sourcePath, bakPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    try { File.Delete(bakPath); } catch { }
+                }
                 restoredCount++;
-                bm.Log("Accessibility", $"Restored original {fileName} from embedded resource to {destPath}");
+                bm.Log("Accessibility", $"Restored {fileName} from {sourcePath} to {destPath}");
             }
             catch (Exception ex)
             {
@@ -350,6 +339,21 @@ public class SystemRecoveryService
         }
 
         return Result.Ok();
+    }
+
+    private static string? FindInWinSxS(string winSxS, string fileName)
+    {
+        try
+        {
+            if (!Directory.Exists(winSxS)) return null;
+            return Directory.EnumerateFiles(winSxS, fileName, SearchOption.AllDirectories)
+                .OrderByDescending(File.GetLastWriteTimeUtc)
+                .FirstOrDefault();
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     public Result RunSfcScan(ITargetContext ctx)

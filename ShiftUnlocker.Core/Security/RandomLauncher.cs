@@ -134,16 +134,19 @@ public static class RandomLauncher
             if (string.IsNullOrEmpty(randomName) || randomName.Length < 17) return;
 
             byte[] bytes = File.ReadAllBytes(exePath);
+            if (!TryGetResourceSectionBounds(bytes, out int rsrcOffset, out int rsrcLength))
+            {
+                return;
+            }
 
-            // меняем ShiftUnlocker.App (17 символов)
+            // патчим только внутри PE-секции .rsrc, не трогая код и single-file бандл
             byte[] target17 = System.Text.Encoding.Unicode.GetBytes("ShiftUnlocker.App");
             byte[] replace17 = System.Text.Encoding.Unicode.GetBytes(randomName);
-            ReplacePattern(bytes, target17, replace17);
+            ReplacePatternInRange(bytes, rsrcOffset, rsrcLength, target17, replace17);
 
-            // меняем ShiftUnlocker (13 символов)
             byte[] target13 = System.Text.Encoding.Unicode.GetBytes("ShiftUnlocker");
             byte[] replace13 = System.Text.Encoding.Unicode.GetBytes(randomName[..13]);
-            ReplacePattern(bytes, target13, replace13);
+            ReplacePatternInRange(bytes, rsrcOffset, rsrcLength, target13, replace13);
 
             File.WriteAllBytes(exePath, bytes);
         }
@@ -153,11 +156,49 @@ public static class RandomLauncher
         }
     }
 
-    private static void ReplacePattern(byte[] source, byte[] target, byte[] replacement)
+    private static bool TryGetResourceSectionBounds(byte[] peBytes, out int rawOffset, out int rawSize)
+    {
+        rawOffset = 0;
+        rawSize = 0;
+        if (peBytes.Length < 0x40 || peBytes[0] != 'M' || peBytes[1] != 'Z') return false;
+
+        int eLfanew = BitConverter.ToInt32(peBytes, 0x3C);
+        if (eLfanew <= 0 || eLfanew + 24 > peBytes.Length) return false;
+        if (peBytes[eLfanew] != 'P' || peBytes[eLfanew + 1] != 'E' || peBytes[eLfanew + 2] != 0 || peBytes[eLfanew + 3] != 0)
+            return false;
+
+        ushort numSections = BitConverter.ToUInt16(peBytes, eLfanew + 6);
+        ushort optHeaderSize = BitConverter.ToUInt16(peBytes, eLfanew + 20);
+        int sectionTableOffset = eLfanew + 24 + optHeaderSize;
+
+        for (int i = 0; i < numSections; i++)
+        {
+            int secOff = sectionTableOffset + i * 40;
+            if (secOff + 40 > peBytes.Length) break;
+
+            string secName = System.Text.Encoding.ASCII.GetString(peBytes, secOff, 8).TrimEnd('\0');
+            if (string.Equals(secName, ".rsrc", StringComparison.Ordinal))
+            {
+                int size = BitConverter.ToInt32(peBytes, secOff + 16);
+                int ptr = BitConverter.ToInt32(peBytes, secOff + 20);
+                if (ptr > 0 && size > 0 && ptr + size <= peBytes.Length)
+                {
+                    rawOffset = ptr;
+                    rawSize = size;
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static void ReplacePatternInRange(byte[] source, int start, int length, byte[] target, byte[] replacement)
     {
         if (target.Length != replacement.Length) return;
+        int end = Math.Min(source.Length, start + length);
 
-        for (int i = 0; i <= source.Length - target.Length; i++)
+        for (int i = start; i <= end - target.Length; i++)
         {
             bool match = true;
             for (int j = 0; j < target.Length; j++)
@@ -174,6 +215,41 @@ public static class RandomLauncher
                 i += target.Length - 1;
             }
         }
+    }
+
+    public static void CleanupOrphanedClones(TimeSpan? maxAge = null)
+    {
+        try
+        {
+            string tempDir = Path.GetTempPath();
+            if (!Directory.Exists(tempDir)) return;
+
+            string currentExe = Environment.ProcessPath ?? "";
+            DateTime cutoff = DateTime.UtcNow - (maxAge ?? TimeSpan.FromMinutes(10));
+
+            foreach (var file in Directory.GetFiles(tempDir, "*.exe"))
+            {
+                if (string.Equals(file, currentExe, StringComparison.OrdinalIgnoreCase)) continue;
+
+                string name = Path.GetFileNameWithoutExtension(file);
+                bool looksLikeClone = (name.Length == 17 && IsRandomlyNamed(file)) ||
+                                      name.StartsWith("su_", StringComparison.OrdinalIgnoreCase);
+                if (!looksLikeClone) continue;
+
+                try
+                {
+                    if (File.GetLastWriteTimeUtc(file) < cutoff)
+                    {
+                        File.Delete(file);
+                    }
+                }
+                catch
+                {
+                    // занят другим запущенным экземпляром
+                }
+            }
+        }
+        catch { }
     }
 
     public static void ScheduleSelfDelete(string exePath)

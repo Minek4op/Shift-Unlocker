@@ -14,9 +14,6 @@
   <ItemGroup>
     <EmbeddedResource Include="app.png" />
     <EmbeddedResource Include="app.ico" />
-    <EmbeddedResource Include="EmbeddedTools\**\*" />
-    <EmbeddedResource Include="EmbeddedSystem\sethc.exe" />
-    <EmbeddedResource Include="EmbeddedSystem\Utilman.exe" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ShiftUnlocker.Native\ShiftUnlocker.Native.csproj" />

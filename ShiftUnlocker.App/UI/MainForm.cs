@@ -312,7 +312,9 @@ public class MainForm : Form
         _pnlContent.Controls.Add(view);
 
         // обновляем данные при переключении вкладки
-        if (view is RestrictionsView rv) rv.RefreshRestrictions();
+        if (view is QuickScanView qv) { _ = qv.EnsureScannedOnceAsync(); }
+        else if (view is AutorunView av) { _ = av.EnsureLoadedOnceAsync(); }
+        else if (view is RestrictionsView rv) rv.RefreshRestrictions();
         else if (view is ProcessView pv) { _ = pv.RefreshProcessesAsync(); }
         else if (view is ToolsLogView tlv) tlv.RefreshLogs();
     }
@@ -341,6 +343,9 @@ public class MainForm : Form
             {
                 _targetContext = new OfflineTargetContext(inst.WindowsDirectory);
             }
+
+            if (_views[0] is QuickScanView qv) qv.ResetScanState();
+            if (_views[1] is AutorunView av) av.ResetLoadState();
 
             UpdateStatusBar();
             SwitchView(_currentViewIndex);

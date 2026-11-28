@@ -23,6 +23,7 @@ public class AutorunView : UserControl
 
     private readonly AutorunService _autorunService = new();
     private List<AutorunEntry> _entries = new();
+    private bool _hasLoadedOnce;
 
     public Func<ITargetContext>? GetContext { get; set; }
     public Func<BackupManager>? GetBackupManager { get; set; }
@@ -117,10 +118,24 @@ public class AutorunView : UserControl
         _btnQuarantine.Enabled = isAdmin;
     }
 
+    public void ResetLoadState()
+    {
+        _hasLoadedOnce = false;
+    }
+
+    public async Task EnsureLoadedOnceAsync()
+    {
+        if (_hasLoadedOnce) return;
+        _hasLoadedOnce = true;
+        await RefreshAutorunsAsync();
+    }
+
     public async Task RefreshAutorunsAsync()
     {
         var ctx = GetContext?.Invoke();
         if (ctx == null) return;
+
+        _hasLoadedOnce = true;
 
         _btnRefresh.Enabled = false;
         _lblInfo.Text = "Сканирование автозагрузки (реестр, службы, задачи, папки)...";

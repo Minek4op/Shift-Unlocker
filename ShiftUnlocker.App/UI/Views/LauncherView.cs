@@ -8,7 +8,6 @@ namespace ShiftUnlocker.App.UI.Views;
 public class LauncherView : UserControl
 {
     private readonly ListView _lvUtilities;
-    private readonly ListViewGroup _grpEmbedded;
     private readonly ListViewGroup _grpBuiltIn;
     private readonly ListViewGroup _grpTools;
     private readonly ListViewGroup _grpCustom;
@@ -52,7 +51,6 @@ public class LauncherView : UserControl
             _btnSfc, _btnDiskCleanup, _btnLogoff
         });
 
-        _grpEmbedded = new ListViewGroup("Встроенные сторонние утилиты (внутри EXE)", HorizontalAlignment.Left);
         _grpBuiltIn = new ListViewGroup("Встроенные системные утилиты", HorizontalAlignment.Left);
         _grpTools = new ListViewGroup("Обнаруженные утилиты (папка Tools)", HorizontalAlignment.Left);
         _grpCustom = new ListViewGroup("Добавленные пользователем", HorizontalAlignment.Left);
@@ -67,7 +65,7 @@ public class LauncherView : UserControl
             ShowGroups = true
         };
         ThemeManager.EnableDoubleBuffering(_lvUtilities);
-        _lvUtilities.Groups.AddRange(new[] { _grpEmbedded, _grpBuiltIn, _grpTools, _grpCustom });
+        _lvUtilities.Groups.AddRange(new[] { _grpBuiltIn, _grpTools, _grpCustom });
 
         _lvUtilities.Columns.Add("Статус", 90);
         _lvUtilities.Columns.Add("Название утилиты", 200);
@@ -151,11 +149,8 @@ public class LauncherView : UserControl
 
         foreach (var u in _items)
         {
-            bool isEmbedded = !string.IsNullOrEmpty(u.EmbeddedResourceName);
-            string status = isEmbedded ? "Встроена" : (u.ExistsOnDisk ? "Готов" : "Не найден");
-            var grp = isEmbedded
-                ? _grpEmbedded
-                : (u.IsBuiltIn ? _grpBuiltIn : (u.IsUserAdded ? _grpCustom : _grpTools));
+            string status = u.ExistsOnDisk ? "Готов" : "Не найден";
+            var grp = u.IsBuiltIn ? _grpBuiltIn : (u.IsUserAdded ? _grpCustom : _grpTools);
 
             var item = new ListViewItem(new[]
             {

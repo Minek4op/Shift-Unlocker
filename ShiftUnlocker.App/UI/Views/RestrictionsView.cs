@@ -753,13 +753,13 @@ public class RestrictionsView : UserControl
         if (ctx == null || bm == null) return;
 
         if (MessageBox.Show(
-            $"Восстановить оригинальные файлы sethc.exe и Utilman.exe из встроенных ресурсов в:\n{ctx.System32Directory}?\n\nТекущие файлы (если есть) будут сохранены в резервную копию.",
+            $"Восстановить оригинальные файлы sethc.exe и Utilman.exe из резервной копии (.bak) или WinSxS в:\n{ctx.System32Directory}?\n\nТекущие файлы (если есть) будут сохранены в бэкап.",
             "Восстановление файлов", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
         {
             return;
         }
 
-        var res = _systemRecovery.RestoreAccessibilityFilesFromEmbedded(ctx, bm, typeof(RestrictionsView).Assembly);
+        var res = _systemRecovery.RestoreAccessibilityFilesFromWinSxS(ctx, bm);
         MessageBox.Show(res.Success ? "Оригинальные файлы sethc.exe и Utilman.exe успешно восстановлены в System32!" : res.ErrorMessage, "Восстановление файлов", MessageBoxButtons.OK, res.Success ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
         OnStateChanged?.Invoke();
         RefreshAccessibilityStatus();

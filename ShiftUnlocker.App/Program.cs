@@ -58,6 +58,9 @@ static class Program
             // включаем нужные привилегии
             PrivilegeManager.EnableAllPrivileges();
 
+            // чистим старые осиротевшие клоны в %TEMP%
+            RandomLauncher.CleanupOrphanedClones();
+
             // запуск копии под случайным именем от киллеров
             bool noRandom = args.Any(a => a.Equals("--no-random", StringComparison.OrdinalIgnoreCase));
             if (!noRandom)
@@ -88,6 +91,16 @@ static class Program
             if (_instanceMutex != null)
             {
                 GC.KeepAlive(_instanceMutex);
+            }
+
+            // если работали из временного клона — удаляем его после закрытия окна
+            if (args.Any(a => a.Equals("--spawned", StringComparison.OrdinalIgnoreCase)))
+            {
+                string? selfPath = Environment.ProcessPath;
+                if (!string.IsNullOrEmpty(selfPath) && RandomLauncher.IsRandomlyNamed(selfPath))
+                {
+                    RandomLauncher.ScheduleSelfDelete(selfPath);
+                }
             }
         }
         catch (Exception ex)
