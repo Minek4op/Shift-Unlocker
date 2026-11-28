@@ -130,8 +130,18 @@ public class SuScriptService
                     : Path.Combine(ctx.System32Directory, "Tasks", arg.TrimStart('\\'));
                 if (!File.Exists(taskFile)) return Result.Fail("Файл задачи не найден");
                 if (dryRun) return Result.Ok();
-                bm.BackupFile(taskFile);
-                File.Move(taskFile, taskFile + ".disabled", true);
+                var backupRes = bm.BackupFile(taskFile);
+                if (!backupRes.Success) return backupRes;
+                string disabledPath = taskFile + ".disabled";
+                File.Move(taskFile, disabledPath, true);
+                bm.RegisterUndo($"Restore task {taskFile}", () =>
+                {
+                    if (File.Exists(disabledPath))
+                    {
+                        File.Move(disabledPath, taskFile, true);
+                    }
+                    return Result.Ok();
+                });
                 bm.Log("SUScript", $"Task disabled: {taskFile}");
                 return Result.Ok();
             }

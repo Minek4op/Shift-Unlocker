@@ -85,7 +85,7 @@ public class ToolsLogView : UserControl
         _btnRansomware = new RoundedButton { Text = "Шифровальщики...", Size = new Size(150, 28), Margin = new Padding(2, 2, 6, 4) };
         _btnDiagNetCache = new RoundedButton { Text = "EVTX / Сеть / Кэш...", Size = new Size(165, 28), Margin = new Padding(2, 2, 6, 4) };
         _btnProfilesMft = new RoundedButton { Text = "Профили / MFT...", Size = new Size(145, 28), Margin = new Padding(2, 2, 6, 4) };
-        _btnForumZip = new RoundedButton { Text = "Пакет форума (ZIP)", Size = new Size(155, 28), Margin = new Padding(2, 2, 6, 4) };
+        _btnForumZip = new RoundedButton { Text = "Пакет с маск. (ZIP)", Size = new Size(165, 28), Margin = new Padding(2, 2, 6, 4) };
         _btnScreenshot = new RoundedButton { Text = "Скриншот в журнал", Size = new Size(155, 28), Margin = new Padding(2, 2, 6, 4) };
 
         _lblStatus = new Label { Text = "Готов к работе.", AutoSize = true, ForeColor = ThemeManager.TextMutedColor, Margin = new Padding(4, 7, 4, 4) };
@@ -252,13 +252,64 @@ public class ToolsLogView : UserControl
         var bm = GetBackupManager?.Invoke();
         if (ctx == null || bm == null) return;
 
-        using var sfd = new SaveFileDialog { Filter = "ZIP Archive (*.zip)|*.zip", FileName = $"SU_Forum_Package_{DateTime.Now:yyyyMMdd_HHmm}.zip" };
+        _lblStatus.Text = "Подготовка предпросмотра диагностического пакета...";
+        var svc = new ForumPackageService();
+        var (reportText, logsText) = await svc.BuildPackageContentsAsync(ctx, bm);
+        _lblStatus.Text = "Готов к работе.";
+
+        string previewBody =
+            "=== Diagnostic_PartialMask_Report.txt ===\r\n" +
+            reportText +
+            "\r\n\r\n=== ActionLogs.txt ===\r\n" +
+            logsText;
+
+        using var previewDlg = new Form
+        {
+            Text = "Создать диагностический пакет с частичной маскировкой — предпросмотр",
+            Size = new Size(820, 560),
+            StartPosition = FormStartPosition.CenterParent
+        };
+        var lblWarn = new Label
+        {
+            Text = "Внимание: автоматически маскируются только имена пользователя и компьютера. В отчёте могут оставаться пути к файлам, сетевые адреса, hosts, список программ и журнал действий. Проверьте содержимое перед сохранением.",
+            Dock = DockStyle.Top,
+            Height = 44,
+            Padding = new Padding(10, 8, 10, 4)
+        };
+        var txtPreview = new TextBox
+        {
+            Multiline = true,
+            ReadOnly = true,
+            ScrollBars = ScrollBars.Both,
+            WordWrap = false,
+            Font = ThemeManager.MonoFont,
+            Dock = DockStyle.Fill,
+            Text = previewBody
+        };
+        var pnlButtons = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Bottom,
+            Height = 46,
+            FlowDirection = FlowDirection.RightToLeft,
+            Padding = new Padding(8)
+        };
+        var btnSave = new RoundedButton { Text = "Сохранить ZIP...", Size = new Size(140, 30), DialogResult = DialogResult.OK, IsPrimary = true };
+        var btnCancel = new RoundedButton { Text = "Отмена", Size = new Size(100, 30), DialogResult = DialogResult.Cancel };
+        pnlButtons.Controls.AddRange(new Control[] { btnCancel, btnSave });
+        previewDlg.Controls.Add(txtPreview);
+        previewDlg.Controls.Add(lblWarn);
+        previewDlg.Controls.Add(pnlButtons);
+        ThemeManager.ApplyTheme(previewDlg);
+
+        if (previewDlg.ShowDialog(FindForm()) != DialogResult.OK) return;
+
+        using var sfd = new SaveFileDialog { Filter = "ZIP Archive (*.zip)|*.zip", FileName = $"SU_Diagnostic_PartialMask_{DateTime.Now:yyyyMMdd_HHmm}.zip" };
         if (sfd.ShowDialog() != DialogResult.OK) return;
 
-        _lblStatus.Text = "Сборка пакета для форума...";
-        var res = await new ForumPackageService().CreateForumPackageZipAsync(ctx, bm, sfd.FileName);
-        _lblStatus.Text = res.Success ? "Пакет для форума создан." : "Ошибка сборки пакета.";
-        MessageBox.Show(res.Success ? $"ZIP-пакет (без личных данных) сохранён:\n{sfd.FileName}" : res.ErrorMessage, "Пакет для форума", MessageBoxButtons.OK, res.Success ? MessageBoxIcon.Information : MessageBoxIcon.Error);
+        _lblStatus.Text = "Сборка диагностического пакета...";
+        var res = await svc.CreateForumPackageZipAsync(ctx, bm, sfd.FileName);
+        _lblStatus.Text = res.Success ? "Диагностический пакет создан." : "Ошибка сборки пакета.";
+        MessageBox.Show(res.Success ? $"Диагностический пакет с частичной маскировкой сохранён:\n{sfd.FileName}" : res.ErrorMessage, "Диагностический пакет", MessageBoxButtons.OK, res.Success ? MessageBoxIcon.Information : MessageBoxIcon.Error);
     }
 
     private void CaptureWindowScreenshot()

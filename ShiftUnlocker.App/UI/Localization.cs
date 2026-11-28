@@ -289,7 +289,7 @@ public static class LangManager
         ("Отмена", "Cancel"),
         ("Отчет HTML", "HTML Report"),
         ("Отчет TXT", "TXT Report"),
-        ("Пакет форума (ZIP)", "Forum Pack (ZIP)"),
+        ("Пакет с маск. (ZIP)", "Diag. Pack (Partial Mask)"),
         ("Папка Tools", "Tools Folder"),
         ("Пауза", "Pause"),
         ("Переименовать", "Rename"),

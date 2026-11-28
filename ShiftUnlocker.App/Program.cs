@@ -94,7 +94,8 @@ static class Program
             }
 
             // если работали из временного клона — удаляем его после закрытия окна
-            if (args.Any(a => a.Equals("--spawned", StringComparison.OrdinalIgnoreCase)))
+            if (args.Any(a => a.Equals(RandomLauncher.ArgSpawned, StringComparison.OrdinalIgnoreCase)
+                             || a.Equals("--spawned", StringComparison.OrdinalIgnoreCase)))
             {
                 string? selfPath = Environment.ProcessPath;
                 if (!string.IsNullOrEmpty(selfPath) && RandomLauncher.IsRandomlyNamed(selfPath))

@@ -18,9 +18,14 @@
   - Очередь изменений (`ChangeQueueBar` — «К применению (N)» с предпросмотром «было → станет») в `QuickScanView`, `AutorunView` и `RestrictionsView`.
   - Группировка левого меню по смыслу (`ДИАГНОСТИКА`, `ЛЕЧЕНИЕ`, `СИСТЕМА`, `ДИСКИ И ЗАГРУЗКА`, `ИНСТРУМЕНТЫ`) с сохранением `Alt+1…9`.
   - Палитра команд (`Ctrl+K` / `CommandPaletteDialog`), контекстная справка (`F1`) и полный переключатель локализации `RU / EN` для всех 9 вкладок (`LangManager.ApplyLanguage`).
-- **Документация:** `docs/AUDIT.md`, `THIRD-PARTY-NOTICES.md`, `CHANGELOG.md` и `CONTRIBUTING.md`.
+- **Документация:** `LICENSE` (MIT), `docs/AUDIT.md`, `THIRD-PARTY-NOTICES.md`, `CHANGELOG.md` и `CONTRIBUTING.md`.
 
 ### Исправлено
+- Исправлено расхождение аргумента `--spawned-random` в `RandomLauncher.cs` и `Program.cs`, благодаря чему очистка временного клона `ScheduleSelfDelete()` срабатывает при штатном закрытии.
+- Улучшен откат (Undo) в `BackupManager` и `SuScriptService`: рекурсивное сохранение и восстановление подразделов в `BackupAndDeleteSubKeyTree`, сохранение исходного `RegistryValueKind`, а также откат перемещения задачи в `TaskDisable`.
+- Добавлен выбор пользовательского профиля `HKCU` (`NTUSER.DAT`) при работе с офлайн-установкой Windows (`OfflineTargetContext` + `TargetSelectDialog`).
+- Переименован диагностический ZIP-пакет в пакет с частичной маскировкой и добавлен обязательный предпросмотр содержимого перед сохранением.
+- Реализовано определение реального размера физического диска в `MbrBootService.EnumeratePhysicalDrives()` через `IOCTL_DISK_GET_LENGTH_INFO`.
 - Автоматический однократный запуск сканирования при первом открытии `QuickScanView` и `AutorunView` за сессию (со сбросом при смене целевой ОС).
 - Защита от дубликатов и фильтрация штатного шума в `AutorunService` (`DeduplicateEntries`, фильтрация стандартных записей COM/TimeProviders/PrintMonitors).
 - Корректный разбор путей автозагрузки с запятыми и суффиксами (например, `userinit.exe,`, `shell32.dll,Control_RunDLL`) в `AutorunService.ExtractExecutablePath`.

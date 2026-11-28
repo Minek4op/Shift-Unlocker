@@ -87,6 +87,7 @@ public class BackupManager
         {
             object? prevValue = ctx.GetValue(hive, subKey, valueName);
             bool existed = prevValue != null;
+            RegistryValueKind prevKind = existed ? GetValueKindSafe(ctx, hive, subKey, valueName, prevValue!) : kind;
 
             SaveRegistrySnippet(hive, subKey, valueName, prevValue);
 
@@ -94,7 +95,7 @@ public class BackupManager
             {
                 if (existed && prevValue != null)
                 {
-                    ctx.SetValue(hive, subKey, valueName, prevValue, kind);
+                    ctx.SetValue(hive, subKey, valueName, prevValue, prevKind);
                 }
                 else
                 {
@@ -135,11 +136,12 @@ public class BackupManager
                 return Result.Ok();
             }
 
+            RegistryValueKind prevKind = GetValueKindSafe(ctx, hive, subKey, valueName, prevValue);
             SaveRegistrySnippet(hive, subKey, valueName, prevValue);
 
             RegisterUndo($"Restore {hive}\\{subKey}\\{valueName}", () =>
             {
-                ctx.SetValue(hive, subKey, valueName, prevValue, RegistryValueKind.String);
+                ctx.SetValue(hive, subKey, valueName, prevValue, prevKind);
                 return Result.Ok();
             });
 
@@ -168,22 +170,31 @@ public class BackupManager
 
         try
         {
-            using var key = ctx.OpenKey(hive, subKey, false);
-            if (key != null)
-            {
-                var values = new List<RegValueEntry>();
-                foreach (var vName in key.GetValueNames())
-                {
-                    var val = key.GetValue(vName);
-                    if (val != null)
-                    {
-                        values.Add(new RegValueEntry(vName, val, key.GetValueKind(vName)));
-                    }
-                }
+            var snapshot = new List<(string SubKeyPath, List<RegValueEntry> Values)>();
+            CaptureSubKeySnapshot(ctx, hive, subKey, snapshot);
 
-                string regContent = RegFileHandler.ExportToRegFormat($"{hive}\\{subKey}", values);
+            if (snapshot.Count > 0)
+            {
+                var sb = new StringBuilder();
+                foreach (var node in snapshot)
+                {
+                    sb.AppendLine(RegFileHandler.ExportToRegFormat($"{hive}\\{node.SubKeyPath}", node.Values));
+                }
                 string backupFile = Path.Combine(_sessionFolder, $"Key_{Guid.NewGuid():N}.reg");
-                File.WriteAllText(backupFile, regContent, Encoding.Unicode);
+                File.WriteAllText(backupFile, sb.ToString(), Encoding.Unicode);
+
+                RegisterUndo($"Restore key tree {hive}\\{subKey}", () =>
+                {
+                    foreach (var node in snapshot)
+                    {
+                        using var created = ctx.OpenKey(hive, node.SubKeyPath, true);
+                        foreach (var v in node.Values)
+                        {
+                            ctx.SetValue(hive, node.SubKeyPath, v.Name, v.Value, v.Kind);
+                        }
+                    }
+                    return Result.Ok();
+                });
             }
 
             ctx.DeleteSubKeyTree(hive, subKey);
@@ -195,6 +206,58 @@ public class BackupManager
             Log("Registry", $"{description} FAILED: {ex.Message}", false);
             return Result.Fail(ex.Message);
         }
+    }
+
+    private static void CaptureSubKeySnapshot(
+        ITargetContext ctx,
+        string hive,
+        string subKey,
+        List<(string SubKeyPath, List<RegValueEntry> Values)> snapshot)
+    {
+        using var key = ctx.OpenKey(hive, subKey, false);
+        if (key == null) return;
+
+        var values = new List<RegValueEntry>();
+        foreach (var vName in key.GetValueNames())
+        {
+            var val = key.GetValue(vName);
+            if (val != null)
+            {
+                values.Add(new RegValueEntry(vName, val, key.GetValueKind(vName)));
+            }
+        }
+
+        snapshot.Add((subKey, values));
+
+        foreach (var childName in key.GetSubKeyNames())
+        {
+            string childPath = string.IsNullOrEmpty(subKey) ? childName : $@"{subKey}\{childName}";
+            CaptureSubKeySnapshot(ctx, hive, childPath, snapshot);
+        }
+    }
+
+    private static RegistryValueKind GetValueKindSafe(
+        ITargetContext ctx,
+        string hive,
+        string subKey,
+        string valueName,
+        object value)
+    {
+        try
+        {
+            using var key = ctx.OpenKey(hive, subKey, false);
+            if (key != null) return key.GetValueKind(valueName);
+        }
+        catch { }
+
+        return value switch
+        {
+            int => RegistryValueKind.DWord,
+            long => RegistryValueKind.QWord,
+            byte[] => RegistryValueKind.Binary,
+            string[] => RegistryValueKind.MultiString,
+            _ => RegistryValueKind.String
+        };
     }
 
     public Result BackupFile(string filePath)

@@ -20,8 +20,9 @@ public class OfflineTargetContext : ITargetContext
     private bool _disposed;
 
     public IReadOnlyList<UserProfileInfo> UserProfiles => _userProfiles;
+    public string? SelectedUserProfileName { get; private set; }
 
-    public OfflineTargetContext(string targetWindowsDir)
+    public OfflineTargetContext(string targetWindowsDir, string? preferredUserProfile = null)
     {
         IsWinPE = WindowsInstallationDetector.IsRunningInWinPE();
         WindowsDirectory = targetWindowsDir;
@@ -32,6 +33,58 @@ public class OfflineTargetContext : ITargetContext
         LoadHives();
         DetectCurrentControlSet();
         LoadUserProfiles();
+
+        if (!string.IsNullOrWhiteSpace(preferredUserProfile) && SelectUserProfile(preferredUserProfile))
+        {
+            return;
+        }
+
+        SelectedUserProfileName = _userProfiles.FirstOrDefault(u => !string.IsNullOrEmpty(u.LoadedHiveKey))?.UserName;
+    }
+
+    public bool SelectUserProfile(string userName)
+    {
+        var match = _userProfiles.FirstOrDefault(u =>
+            u.UserName.Equals(userName, StringComparison.OrdinalIgnoreCase) &&
+            !string.IsNullOrEmpty(u.LoadedHiveKey));
+        if (match == null) return false;
+        SelectedUserProfileName = match.UserName;
+        return true;
+    }
+
+    public static List<string> EnumerateUserProfiles(string targetWindowsDir)
+    {
+        var result = new List<string>();
+        string root = Directory.GetParent(targetWindowsDir.TrimEnd('\\'))?.FullName
+                      ?? Path.GetPathRoot(targetWindowsDir)
+                      ?? @"C:\";
+        string usersDir = Path.Combine(root, "Users");
+        if (!Directory.Exists(usersDir)) return result;
+
+        try
+        {
+            foreach (var userDir in Directory.GetDirectories(usersDir))
+            {
+                string userName = Path.GetFileName(userDir);
+                if (userName.Equals("Public", StringComparison.OrdinalIgnoreCase) ||
+                    userName.Equals("Default User", StringComparison.OrdinalIgnoreCase) ||
+                    userName.Equals("All Users", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                if (File.Exists(Path.Combine(userDir, "NTUSER.DAT")))
+                {
+                    result.Add(userName);
+                }
+            }
+        }
+        catch { }
+
+        return result
+            .OrderBy(u => u.Equals("Default", StringComparison.OrdinalIgnoreCase) ? 1 : 0)
+            .ThenBy(u => u, StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     private void LoadHives()
@@ -194,10 +247,13 @@ public class OfflineTargetContext : ITargetContext
 
         if (normHive is "HKCU" or "HKEY_CURRENT_USER")
         {
-            var firstUser = _userProfiles.FirstOrDefault(u => !string.IsNullOrEmpty(u.LoadedHiveKey));
-            if (firstUser?.LoadedHiveKey != null)
+            var selectedUser = !string.IsNullOrWhiteSpace(SelectedUserProfileName)
+                ? _userProfiles.FirstOrDefault(u => u.UserName.Equals(SelectedUserProfileName, StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(u.LoadedHiveKey))
+                : null;
+            selectedUser ??= _userProfiles.FirstOrDefault(u => !string.IsNullOrEmpty(u.LoadedHiveKey));
+            if (selectedUser?.LoadedHiveKey != null)
             {
-                return (Registry.Users, Path.Combine(firstUser.LoadedHiveKey, cleanSubKey));
+                return (Registry.Users, Path.Combine(selectedUser.LoadedHiveKey, cleanSubKey));
             }
 
             if (_loadedHives.TryGetValue("DEFAULT", out var defKey))

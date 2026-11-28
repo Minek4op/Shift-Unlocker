@@ -49,19 +49,34 @@ public class TreatmentProfileService
 
 public class ForumPackageService
 {
+    public async Task<(string ReportText, string LogsText)> BuildPackageContentsAsync(ITargetContext ctx, BackupManager bm)
+    {
+        var reportSvc = new SystemReportService();
+        string frstReport = await reportSvc.GenerateFrstStyleReportAsync(ctx, bm, sanitizeUsernames: true);
+
+        string user = Environment.UserName;
+        string machine = Environment.MachineName;
+        var logs = bm.ActionLogs.Select(l =>
+        {
+            string line = $"[{l.Timestamp:HH:mm:ss}] {(l.Success ? "OK" : "ERR")} [{l.Category}] {l.Description}";
+            if (!string.IsNullOrEmpty(user)) line = line.Replace(user, "[USER]", StringComparison.OrdinalIgnoreCase);
+            if (!string.IsNullOrEmpty(machine)) line = line.Replace(machine, "[PC]", StringComparison.OrdinalIgnoreCase);
+            return line;
+        });
+
+        return (frstReport, string.Join(Environment.NewLine, logs));
+    }
+
     public async Task<Result> CreateForumPackageZipAsync(ITargetContext ctx, BackupManager bm, string zipPath, string? fixlistText = null)
     {
-        string tempDir = Path.Combine(Path.GetTempPath(), "SU_ForumPkg_" + Guid.NewGuid().ToString("N"));
+        string tempDir = Path.Combine(Path.GetTempPath(), "SU_DiagPkg_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempDir);
 
         try
         {
-            var reportSvc = new SystemReportService();
-            string frstReport = await reportSvc.GenerateFrstStyleReportAsync(ctx, bm, sanitizeUsernames: true);
-            File.WriteAllText(Path.Combine(tempDir, "FRST_Sanitized_Report.txt"), frstReport);
-
-            var logs = bm.ActionLogs.Select(l => $"[{l.Timestamp:HH:mm:ss}] {(l.Success ? "OK" : "ERR")} [{l.Category}] {l.Description}");
-            File.WriteAllLines(Path.Combine(tempDir, "ActionLogs.txt"), logs);
+            var (frstReport, logsText) = await BuildPackageContentsAsync(ctx, bm);
+            File.WriteAllText(Path.Combine(tempDir, "Diagnostic_PartialMask_Report.txt"), frstReport);
+            File.WriteAllText(Path.Combine(tempDir, "ActionLogs.txt"), logsText);
 
             if (!string.IsNullOrWhiteSpace(fixlistText))
             {

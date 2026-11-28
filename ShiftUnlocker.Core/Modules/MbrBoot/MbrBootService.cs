@@ -35,6 +35,20 @@ public class MbrBootService
             IntPtr buffer = Marshal.AllocHGlobal(bufferSize);
             try
             {
+                const uint IOCTL_DISK_GET_LENGTH_INFO = 0x0007405C;
+                if (Kernel32.DeviceIoControl(
+                    handle,
+                    IOCTL_DISK_GET_LENGTH_INFO,
+                    IntPtr.Zero,
+                    0,
+                    buffer,
+                    8,
+                    out uint lenReturned,
+                    IntPtr.Zero) && lenReturned >= 8)
+                {
+                    sizeBytes = Marshal.ReadInt64(buffer, 0);
+                }
+
                 if (Kernel32.DeviceIoControl(
                     handle,
                     DiskIoControlConstants.IOCTL_DISK_GET_DRIVE_LAYOUT_EX,

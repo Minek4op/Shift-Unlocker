@@ -422,7 +422,7 @@ public class MainForm : Form
             }
             else
             {
-                _targetContext = new OfflineTargetContext(inst.WindowsDirectory);
+                _targetContext = new OfflineTargetContext(inst.WindowsDirectory, dlg.SelectedUserProfile);
             }
 
             if (_views[0] is QuickScanView qv) qv.ResetScanState();

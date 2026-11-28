@@ -7,11 +7,14 @@ namespace ShiftUnlocker.App.UI;
 public class TargetSelectDialog : Form
 {
     private readonly ListView _lvInstallations;
+    private readonly ComboBox _cmbUserProfile;
+    private readonly Label _lblProfile;
     private readonly RoundedButton _btnSelect;
     private readonly RoundedButton _btnCancel;
     private readonly Label _lblInfo;
 
     public WindowsInstallationInfo? SelectedInstallation { get; private set; }
+    public string? SelectedUserProfile { get; private set; }
 
     public TargetSelectDialog()
     {
@@ -54,6 +57,20 @@ public class TargetSelectDialog : Form
             Padding = new Padding(12, 10, 12, 10)
         };
 
+        _lblProfile = new Label
+        {
+            Text = "Профиль HKCU:",
+            AutoSize = true,
+            Location = new Point(12, 18)
+        };
+        _cmbUserProfile = new ComboBox
+        {
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            Location = new Point(115, 14),
+            Size = new Size(240, 26),
+            Enabled = false
+        };
+
         _btnSelect = new RoundedButton
         {
             Text = "Выбрать цель",
@@ -67,6 +84,7 @@ public class TargetSelectDialog : Form
             if (_lvInstallations.SelectedItems.Count > 0)
             {
                 SelectedInstallation = _lvInstallations.SelectedItems[0].Tag as WindowsInstallationInfo;
+                SelectedUserProfile = _cmbUserProfile.Enabled ? _cmbUserProfile.SelectedItem?.ToString() : null;
             }
         };
 
@@ -78,8 +96,12 @@ public class TargetSelectDialog : Form
             DialogResult = DialogResult.Cancel
         };
 
+        bottomPanel.Controls.Add(_lblProfile);
+        bottomPanel.Controls.Add(_cmbUserProfile);
         bottomPanel.Controls.Add(_btnSelect);
         bottomPanel.Controls.Add(_btnCancel);
+
+        _lvInstallations.SelectedIndexChanged += (s, e) => UpdateProfileSelector();
 
         var centerPanel = new Panel { Dock = DockStyle.Fill, Padding = new Padding(12, 0, 12, 0) };
         centerPanel.Controls.Add(_lvInstallations);
@@ -119,5 +141,35 @@ public class TargetSelectDialog : Form
         {
             _lvInstallations.Items[0].Selected = true;
         }
+        UpdateProfileSelector();
+    }
+
+    private void UpdateProfileSelector()
+    {
+        _cmbUserProfile.Items.Clear();
+        var inst = _lvInstallations.SelectedItems.Count > 0
+            ? _lvInstallations.SelectedItems[0].Tag as WindowsInstallationInfo
+            : null;
+
+        if (inst == null || inst.IsCurrentOS)
+        {
+            _cmbUserProfile.Items.Add("(Текущий пользователь)");
+            _cmbUserProfile.SelectedIndex = 0;
+            _cmbUserProfile.Enabled = false;
+            return;
+        }
+
+        var profiles = OfflineTargetContext.EnumerateUserProfiles(inst.WindowsDirectory);
+        if (profiles.Count == 0)
+        {
+            _cmbUserProfile.Items.Add("(Профили не найдены)");
+            _cmbUserProfile.SelectedIndex = 0;
+            _cmbUserProfile.Enabled = false;
+            return;
+        }
+
+        foreach (var p in profiles) _cmbUserProfile.Items.Add(p);
+        _cmbUserProfile.SelectedIndex = 0;
+        _cmbUserProfile.Enabled = true;
     }
 }
