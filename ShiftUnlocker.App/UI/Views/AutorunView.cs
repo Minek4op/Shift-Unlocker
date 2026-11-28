@@ -24,6 +24,8 @@ public class AutorunView : UserControl
     private readonly AutorunService _autorunService = new();
     private List<AutorunEntry> _entries = new();
     private bool _hasLoadedOnce;
+    private readonly Label _lblEmptyHint;
+    private readonly ChangeQueueBar _queueBar;
 
     public Func<ITargetContext>? GetContext { get; set; }
     public Func<BackupManager>? GetBackupManager { get; set; }
@@ -95,8 +97,26 @@ public class AutorunView : UserControl
 
         _lvAutoruns.ContextMenuStrip = cms;
 
+        _lblEmptyHint = new Label
+        {
+            Dock = DockStyle.Top,
+            Height = 28,
+            Text = LangManager.T("empty_hint"),
+            ForeColor = ThemeManager.TextMutedColor,
+            Padding = new Padding(6, 6, 0, 0)
+        };
+
+        _queueBar = new ChangeQueueBar();
+        _queueBar.OnApplied = () =>
+        {
+            OnStateChanged?.Invoke();
+            _ = RefreshAutorunsAsync();
+        };
+
         var centerPanel = new Panel { Dock = DockStyle.Fill, Padding = new Padding(0, 8, 0, 0) };
         centerPanel.Controls.Add(_lvAutoruns);
+        centerPanel.Controls.Add(_lblEmptyHint);
+        centerPanel.Controls.Add(_queueBar);
 
         Controls.Add(centerPanel);
         Controls.Add(topPanel);
@@ -123,6 +143,11 @@ public class AutorunView : UserControl
         _hasLoadedOnce = false;
     }
 
+    public void SetSuspiciousFilter()
+    {
+        if (_cbFilter.Items.Count > 1) _cbFilter.SelectedIndex = 1;
+    }
+
     public async Task EnsureLoadedOnceAsync()
     {
         if (_hasLoadedOnce) return;
@@ -138,7 +163,8 @@ public class AutorunView : UserControl
         _hasLoadedOnce = true;
 
         _btnRefresh.Enabled = false;
-        _lblInfo.Text = "Сканирование автозагрузки (реестр, службы, задачи, папки)...";
+        _lblEmptyHint.Visible = false;
+        _lblInfo.Text = $"{LangManager.T("scanning_msg")} (реестр, службы, задачи, папки)";
 
         try
         {
@@ -252,47 +278,20 @@ public class AutorunView : UserControl
         var bm = GetBackupManager?.Invoke();
         if (ctx == null || bm == null) return;
 
-        int successCount = 0;
-        var errors = new List<string>();
-
         foreach (ListViewItem it in _lvAutoruns.SelectedItems)
         {
-            if (it.Tag is AutorunEntry e)
+            if (it.Tag is AutorunEntry e && e.IsEnabled)
             {
-                if (!e.IsEnabled)
-                {
-                    continue; // Already disabled
-                }
-
-                var res = _autorunService.DisableEntry(ctx, bm, e);
-                if (res.Success)
-                {
-                    successCount++;
-                }
-                else
-                {
-                    errors.Add($"{e.Name}: {res.Error}");
-                }
+                _queueBar.Enqueue(new QueuedChange(
+                    $"ar_dis_{e.Id}",
+                    e.Name,
+                    $"{e.Name}: Включен → Отключен",
+                    () =>
+                    {
+                        var r = _autorunService.DisableEntry(ctx, bm, e);
+                        return r.Success ? ShiftUnlocker.Core.Common.Result.Ok() : ShiftUnlocker.Core.Common.Result.Fail(r.Error ?? "Ошибка");
+                    }));
             }
-        }
-
-        OnStateChanged?.Invoke();
-        _ = RefreshAutorunsAsync();
-
-        if (errors.Count > 0)
-        {
-            if (errors.Any(x => x.Contains("Администратора") || x.Contains("Отказано в доступе")))
-            {
-                CheckAdminRequired("Отключение автозагрузки");
-            }
-            else
-            {
-                MessageBox.Show($"Отключено: {successCount}.\nОшибки:\n" + string.Join("\n", errors.Take(5)), "Результат отключения", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            }
-        }
-        else if (successCount > 0)
-        {
-            _lblInfo.Text = $"Успешно отключено записей: {successCount} (бэкап создан).";
         }
     }
 
@@ -308,47 +307,20 @@ public class AutorunView : UserControl
         var bm = GetBackupManager?.Invoke();
         if (ctx == null || bm == null) return;
 
-        int successCount = 0;
-        var errors = new List<string>();
-
         foreach (ListViewItem it in _lvAutoruns.SelectedItems)
         {
-            if (it.Tag is AutorunEntry e)
+            if (it.Tag is AutorunEntry e && !e.IsEnabled)
             {
-                if (e.IsEnabled)
-                {
-                    continue; // Already enabled
-                }
-
-                var res = _autorunService.EnableEntry(ctx, bm, e);
-                if (res.Success)
-                {
-                    successCount++;
-                }
-                else
-                {
-                    errors.Add($"{e.Name}: {res.Error}");
-                }
+                _queueBar.Enqueue(new QueuedChange(
+                    $"ar_en_{e.Id}",
+                    e.Name,
+                    $"{e.Name}: Отключен → Включен",
+                    () =>
+                    {
+                        var r = _autorunService.EnableEntry(ctx, bm, e);
+                        return r.Success ? ShiftUnlocker.Core.Common.Result.Ok() : ShiftUnlocker.Core.Common.Result.Fail(r.Error ?? "Ошибка");
+                    }));
             }
-        }
-
-        OnStateChanged?.Invoke();
-        _ = RefreshAutorunsAsync();
-
-        if (errors.Count > 0)
-        {
-            if (errors.Any(x => x.Contains("Администратора") || x.Contains("Отказано в доступе")))
-            {
-                CheckAdminRequired("Включение автозагрузки");
-            }
-            else
-            {
-                MessageBox.Show($"Включено: {successCount}.\nОшибки:\n" + string.Join("\n", errors.Take(5)), "Результат включения", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            }
-        }
-        else if (successCount > 0)
-        {
-            _lblInfo.Text = $"Успешно включено записей: {successCount}.";
         }
     }
 

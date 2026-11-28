@@ -31,6 +31,7 @@ public class RestrictionsView : UserControl
     private readonly RoundedButton _btnResetProxy;
     private readonly ComboBox _cbCategory;
     private readonly Label _lblInfo;
+    private readonly ChangeQueueBar _queueBar;
 
     // шрифты, тема и язык
     private readonly RoundedButton _btnFixFonts;
@@ -139,8 +140,16 @@ public class RestrictionsView : UserControl
         resMenu.Items.Add("Удалить пользовательское ограничение", null, (s, e) => DeleteCustomSelected());
         _lvRestrictions.ContextMenuStrip = resMenu;
 
+        _queueBar = new ChangeQueueBar();
+        _queueBar.OnApplied = () =>
+        {
+            OnStateChanged?.Invoke();
+            RefreshRestrictions();
+        };
+
         var resCenter = new Panel { Dock = DockStyle.Fill, Padding = new Padding(0, 8, 0, 0) };
         resCenter.Controls.Add(_lvRestrictions);
+        resCenter.Controls.Add(_queueBar);
 
         _tabRestrictions.Controls.Add(resCenter);
         _tabRestrictions.Controls.Add(resTop);
@@ -353,6 +362,18 @@ public class RestrictionsView : UserControl
             "- Также используется при лечении системы, если вредоносное ПО само перехватило sethc/utilman.\r\n";
     }
 
+    public void SelectCategory(string category)
+    {
+        for (int i = 0; i < _cbCategory.Items.Count; i++)
+        {
+            if (string.Equals(_cbCategory.Items[i]?.ToString(), category, StringComparison.OrdinalIgnoreCase))
+            {
+                _cbCategory.SelectedIndex = i;
+                break;
+            }
+        }
+    }
+
     public void RefreshRestrictions()
     {
         var ctx = GetContext?.Invoke();
@@ -417,19 +438,17 @@ public class RestrictionsView : UserControl
             return;
         }
 
-        int unlockedCount = 0;
         foreach (ListViewItem it in _lvRestrictions.SelectedItems)
         {
             if (it.Tag is RestrictionItem r)
             {
-                var res = r.Unlock(ctx, bm);
-                if (res.Success) unlockedCount++;
+                _queueBar.Enqueue(new QueuedChange(
+                    $"rest_unlock_{r.Id}",
+                    r.Title,
+                    $"{r.Title}: Заблокировано → Разрешено",
+                    () => r.Unlock(ctx, bm)));
             }
         }
-
-        OnStateChanged?.Invoke();
-        RefreshRestrictions();
-        MessageBox.Show($"Разблокировано элементов: {unlockedCount}.\nПараметры успешно сброшены в стандартные значения.", "Снятие ограничений", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     private void LockSelected()
@@ -444,24 +463,17 @@ public class RestrictionsView : UserControl
             return;
         }
 
-        int lockedCount = 0;
-        var errors = new List<string>();
         foreach (ListViewItem it in _lvRestrictions.SelectedItems)
         {
             if (it.Tag is RestrictionItem r)
             {
-                var res = r.Lock(ctx, bm);
-                if (res.Success) lockedCount++;
-                else if (!string.IsNullOrEmpty(res.ErrorMessage)) errors.Add(res.ErrorMessage);
+                _queueBar.Enqueue(new QueuedChange(
+                    $"rest_lock_{r.Id}",
+                    r.Title,
+                    $"{r.Title}: Разрешено → Заблокировано",
+                    () => r.Lock(ctx, bm)));
             }
         }
-
-        OnStateChanged?.Invoke();
-        RefreshRestrictions();
-
-        string msg = $"Заблокировано элементов: {lockedCount}.";
-        if (errors.Count > 0) msg += "\nОшибки: " + string.Join("; ", errors);
-        MessageBox.Show(msg, "Блокировка", MessageBoxButtons.OK, errors.Count == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
     }
 
     private void AddCustomRestriction()

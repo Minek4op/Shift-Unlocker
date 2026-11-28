@@ -104,25 +104,52 @@ public class MainForm : Form
 
         var btnTarget = new RoundedButton
         {
-            Text = "Выбор целевой ОС",
-            Size = new Size(160, 32),
-            Location = new Point(320, 11),
+            Text = LangManager.T("btn_target"),
+            Size = new Size(145, 32),
+            Location = new Point(230, 11),
             Font = ThemeManager.StandardFont
         };
 
         var btnUndo = new RoundedButton
         {
-            Text = "Откатить (Undo)",
-            Size = new Size(130, 32),
-            Location = new Point(490, 11),
+            Text = LangManager.T("btn_undo"),
+            Size = new Size(120, 32),
+            Location = new Point(383, 11),
             Font = ThemeManager.StandardFont
         };
 
+        var btnPalette = new RoundedButton
+        {
+            Text = LangManager.T("btn_palette"),
+            Size = new Size(135, 32),
+            Location = new Point(511, 11),
+            Font = ThemeManager.StandardFont
+        };
+        btnPalette.Click += (s, e) => ShowCommandPalette();
+
+        var btnHelp = new RoundedButton
+        {
+            Text = LangManager.T("btn_help"),
+            Size = new Size(105, 32),
+            Location = new Point(654, 11),
+            Font = ThemeManager.StandardFont
+        };
+        btnHelp.Click += (s, e) => ShowContextHelp();
+
+        var btnLang = new RoundedButton
+        {
+            Text = "RU / EN",
+            Size = new Size(72, 32),
+            Location = new Point(767, 11),
+            Font = ThemeManager.BoldFont
+        };
+        btnLang.Click += (s, e) => LangManager.ToggleLanguage();
+
         _btnElevate = new RoundedButton
         {
-            Text = "Права Администратора",
-            Size = new Size(180, 32),
-            Location = new Point(630, 11),
+            Text = LangManager.T("btn_elevate"),
+            Size = new Size(175, 32),
+            Location = new Point(847, 11),
             Font = ThemeManager.BoldFont,
             IsPrimary = true
         };
@@ -132,28 +159,22 @@ public class MainForm : Form
         _btnElevate.Visible = !isAdmin;
         btnUndo.Enabled = isAdmin;
 
-        topBar.Controls.AddRange(new Control[] { picAvatar, lblTitle, btnTarget, btnUndo, _btnElevate });
+        topBar.Controls.AddRange(new Control[] { picAvatar, lblTitle, btnTarget, btnUndo, btnPalette, btnHelp, btnLang, _btnElevate });
 
-        // левое меню
+        // левое меню с группировкой по смыслу
         _pnlMenu = new Panel
         {
             Dock = DockStyle.Left,
-            Width = 210,
-            Padding = new Padding(8, 10, 8, 10),
+            Width = 220,
+            Padding = new Padding(8, 6, 8, 6),
+            AutoScroll = true,
             BackColor = ThemeManager.BackgroundColor
         };
 
-        string[] menuTitles =
+        string[] menuKeys =
         [
-            "[Alt+1]  Обзор / Скан",
-            "[Alt+2]  Автозагрузка",
-            "[Alt+3]  Диспетчер задач",
-            "[Alt+4]  MBR / Загрузчик",
-            "[Alt+5]  Разблокировка",
-            "[Alt+6]  Утилиты",
-            "[Alt+7]  Редактор реестра",
-            "[Alt+8]  Проводник",
-            "[Alt+9]  Мастер и Журнал"
+            "nav_scan", "nav_autorun", "nav_proc", "nav_mbr",
+            "nav_restrict", "nav_tools", "nav_reg", "nav_files", "nav_wizard"
         ];
 
         for (int i = 0; i < 9; i++)
@@ -161,18 +182,68 @@ public class MainForm : Form
             int index = i;
             var btn = new RoundedNavButton
             {
-                Text = menuTitles[i],
-                Height = 44,
+                Text = LangManager.T(menuKeys[i]),
+                Height = 36,
                 Font = ThemeManager.StandardFont
             };
             btn.Click += (s, e) => SwitchView(index);
             _menuButtons[i] = btn;
         }
 
-        for (int i = 8; i >= 0; i--)
+        Label MakeGroupHeader(string key) => new Label
         {
-            _pnlMenu.Controls.Add(_menuButtons[i]);
+            Text = LangManager.T(key),
+            Dock = DockStyle.Top,
+            Height = 22,
+            Padding = new Padding(6, 6, 0, 0),
+            Font = new Font(ThemeManager.BoldFont.FontFamily, 7.5f, FontStyle.Bold),
+            ForeColor = ThemeManager.TextMutedColor,
+            Tag = key
+        };
+
+        var grpDiag = MakeGroupHeader("menu_grp_diag");
+        var grpHeal = MakeGroupHeader("menu_grp_heal");
+        var grpSys = MakeGroupHeader("menu_grp_sys");
+        var grpDisk = MakeGroupHeader("menu_grp_disk");
+        var grpTools = MakeGroupHeader("menu_grp_tools");
+
+        // Dock=Top добавляется в обратном порядке (снизу вверх)
+        Control[] menuOrderBottomToTop =
+        [
+            _menuButtons[7], // Проводник
+            _menuButtons[5], // Утилиты
+            grpTools,
+            _menuButtons[3], // MBR / Загрузчик
+            grpDisk,
+            _menuButtons[6], // Редактор реестра
+            _menuButtons[2], // Диспетчер задач
+            grpSys,
+            _menuButtons[8], // Мастер и Журнал
+            _menuButtons[4], // Разблокировка
+            grpHeal,
+            _menuButtons[1], // Автозагрузка
+            _menuButtons[0], // Обзор / Скан
+            grpDiag
+        ];
+
+        foreach (var ctrl in menuOrderBottomToTop)
+        {
+            _pnlMenu.Controls.Add(ctrl);
         }
+
+        LangManager.LanguageChanged += () =>
+        {
+            btnTarget.Text = LangManager.T("btn_target");
+            btnUndo.Text = LangManager.T("btn_undo");
+            btnPalette.Text = LangManager.T("btn_palette");
+            btnHelp.Text = LangManager.T("btn_help");
+            _btnElevate.Text = LangManager.T("btn_elevate");
+            for (int i = 0; i < 9; i++) _menuButtons[i].Text = LangManager.T(menuKeys[i]);
+            foreach (Control c in _pnlMenu.Controls)
+            {
+                if (c is Label lbl && lbl.Tag is string k) lbl.Text = LangManager.T(k);
+            }
+        };
 
         // основная область
         _pnlContent = new Panel
@@ -293,6 +364,31 @@ public class MainForm : Form
         _views[6] = v7;
         _views[7] = v8;
         _views[8] = v9;
+
+        v1.OnScenarioSelected = scenario =>
+        {
+            switch (scenario)
+            {
+                case "tools_blocked":
+                    SwitchView(4);
+                    v5.SelectCategory("Инструменты");
+                    break;
+                case "usb_shortcuts":
+                    SwitchView(4);
+                    v5.SelectCategory("Накопители");
+                    break;
+                case "banner":
+                    SwitchView(1);
+                    v2.SetSuspiciousFilter();
+                    break;
+                case "encrypted":
+                    SwitchView(7);
+                    break;
+                case "noboot":
+                    SwitchView(3);
+                    break;
+            }
+        };
     }
 
     public void SwitchView(int index)
@@ -366,6 +462,8 @@ public class MainForm : Form
             case Keys.Alt | Keys.D8: SwitchView(7); return true;
             case Keys.Alt | Keys.D9: SwitchView(8); return true;
             case Keys.Alt | Keys.T: ShowTargetDialog(); return true;
+            case Keys.Control | Keys.K: ShowCommandPalette(); return true;
+            case Keys.F1: ShowContextHelp(); return true;
             case Keys.Alt | Keys.U:
                 _backupManager.UndoLast();
                 UpdateStatusBar();
@@ -373,6 +471,36 @@ public class MainForm : Form
         }
 
         return base.ProcessCmdKey(ref msg, keyData);
+    }
+
+    private void ShowContextHelp()
+    {
+        var (title, body) = LangManager.GetHelpForView(_currentViewIndex);
+        MessageBox.Show(this, body, title, MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
+
+    private void ShowCommandPalette()
+    {
+        var commands = new List<PaletteCommand>
+        {
+            new(LangManager.T("nav_scan"), LangManager.T("menu_grp_diag"), () => SwitchView(0)),
+            new(LangManager.T("nav_autorun"), LangManager.T("menu_grp_diag"), () => SwitchView(1)),
+            new(LangManager.T("nav_proc"), LangManager.T("menu_grp_sys"), () => SwitchView(2)),
+            new(LangManager.T("nav_mbr"), LangManager.T("menu_grp_disk"), () => SwitchView(3)),
+            new(LangManager.T("nav_restrict"), LangManager.T("menu_grp_heal"), () => SwitchView(4)),
+            new(LangManager.T("nav_tools"), LangManager.T("menu_grp_tools"), () => SwitchView(5)),
+            new(LangManager.T("nav_reg"), LangManager.T("menu_grp_sys"), () => SwitchView(6)),
+            new(LangManager.T("nav_files"), LangManager.T("menu_grp_tools"), () => SwitchView(7)),
+            new(LangManager.T("nav_wizard"), LangManager.T("menu_grp_heal"), () => SwitchView(8)),
+            new(LangManager.T("btn_target"), "Система", ShowTargetDialog),
+            new(LangManager.T("btn_undo"), "Безопасность", () => { _backupManager.UndoLast(); UpdateStatusBar(); }),
+            new(LangManager.T("btn_help"), "Помощь", ShowContextHelp),
+            new("Переключить язык (RU / EN)", "Настройки", LangManager.ToggleLanguage),
+            new("Удаление и очистка дисков (DiskPart)", "Диски", () => new DiskCleanupDialog().ShowDialog(this))
+        };
+
+        using var dlg = new CommandPaletteDialog(commands);
+        dlg.ShowDialog(this);
     }
 
     protected override void OnFormClosing(FormClosingEventArgs e)

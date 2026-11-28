@@ -13,7 +13,9 @@ public class QuickScanView : UserControl
     private readonly RoundedButton _btnFixSelected;
     private readonly RoundedButton _btnFixAll;
     private readonly Label _lblStatus;
+    private readonly Label _lblEmptyHint;
     private readonly ProgressBar _progressBar;
+    private readonly ChangeQueueBar _queueBar;
 
     private readonly QuickScanService _scanService = new();
     private List<ScanFinding> _currentFindings = new();
@@ -22,11 +24,54 @@ public class QuickScanView : UserControl
     public Func<ITargetContext>? GetContext { get; set; }
     public Func<BackupManager>? GetBackupManager { get; set; }
     public Action? OnStateChanged { get; set; }
+    public Action<string>? OnScenarioSelected { get; set; }
 
     public QuickScanView()
     {
         Dock = DockStyle.Fill;
         Padding = new Padding(8);
+
+        // Панель сценариев "Что случилось?"
+        var scenarioPanel = new RoundedFlowPanel
+        {
+            Dock = DockStyle.Top,
+            Margin = new Padding(0, 0, 0, 6)
+        };
+        var lblScenario = new Label
+        {
+            Text = LangManager.T("what_happened"),
+            AutoSize = true,
+            Font = ThemeManager.BoldFont,
+            Margin = new Padding(2, 6, 8, 4)
+        };
+        scenarioPanel.Controls.Add(lblScenario);
+
+        var scenarios = new (string Id, string Key)[]
+        {
+            ("tools_blocked", "sc_tools_blocked"),
+            ("usb_shortcuts", "sc_usb_shortcuts"),
+            ("banner", "sc_banner"),
+            ("encrypted", "sc_encrypted"),
+            ("noboot", "sc_noboot"),
+            ("fullcheck", "sc_fullcheck")
+        };
+
+        foreach (var (id, key) in scenarios)
+        {
+            string scId = id;
+            var btn = new RoundedButton
+            {
+                Text = LangManager.T(key),
+                Size = new Size(250, 28),
+                Margin = new Padding(2, 2, 6, 4)
+            };
+            btn.Click += (s, e) =>
+            {
+                if (scId == "fullcheck") _ = RunScanAsync();
+                else OnScenarioSelected?.Invoke(scId);
+            };
+            scenarioPanel.Controls.Add(btn);
+        }
 
         var topPanel = new RoundedFlowPanel { Dock = DockStyle.Top };
 
@@ -41,8 +86,8 @@ public class QuickScanView : UserControl
 
         _btnFixSelected = new RoundedButton
         {
-            Text = "Исправить выбранное",
-            Size = new Size(180, 32),
+            Text = "В очередь исправлений",
+            Size = new Size(185, 32),
             Margin = new Padding(2, 2, 6, 4)
         };
 
@@ -64,7 +109,7 @@ public class QuickScanView : UserControl
 
         _lblStatus = new Label
         {
-            Text = "Нажмите «Быстрое сканирование» для проверки системы на вирусы, блокировки и подмены.",
+            Text = LangManager.T("empty_hint"),
             AutoSize = true,
             ForeColor = ThemeManager.TextMutedColor,
             Margin = new Padding(2, 6, 2, 4)
@@ -87,11 +132,30 @@ public class QuickScanView : UserControl
         _lvFindings.Columns.Add("Проблема", 230);
         _lvFindings.Columns.Add("Описание и последствия", 460);
 
-        var centerPanel = new Panel { Dock = DockStyle.Fill, Padding = new Padding(0, 8, 0, 0) };
+        _lblEmptyHint = new Label
+        {
+            Dock = DockStyle.Top,
+            Height = 28,
+            Text = LangManager.T("empty_hint"),
+            ForeColor = ThemeManager.TextMutedColor,
+            Padding = new Padding(6, 6, 0, 0)
+        };
+
+        _queueBar = new ChangeQueueBar();
+        _queueBar.OnApplied = () =>
+        {
+            OnStateChanged?.Invoke();
+            _ = RunScanAsync();
+        };
+
+        var centerPanel = new Panel { Dock = DockStyle.Fill, Padding = new Padding(0, 6, 0, 0) };
         centerPanel.Controls.Add(_lvFindings);
+        centerPanel.Controls.Add(_lblEmptyHint);
+        centerPanel.Controls.Add(_queueBar);
 
         Controls.Add(centerPanel);
         Controls.Add(topPanel);
+        Controls.Add(scenarioPanel);
 
         _btnScan.Click += async (s, e) => await RunScanAsync();
         _btnFixSelected.Click += (s, e) => FixSelected();
@@ -124,8 +188,9 @@ public class QuickScanView : UserControl
         _hasScannedOnce = true;
 
         _btnScan.Enabled = false;
+        _lblEmptyHint.Visible = false;
         _progressBar.Visible = true;
-        _lblStatus.Text = "Сканирование системы (реестр, IFEO, оболочка, ассоциации, диспетчер задач)...";
+        _lblStatus.Text = $"{LangManager.T("scanning_msg")} (реестр, IFEO, оболочка, ассоциации, политики)";
         _lvFindings.Items.Clear();
 
         try
@@ -176,19 +241,17 @@ public class QuickScanView : UserControl
             return;
         }
 
-        int fixedCount = 0;
         foreach (ListViewItem item in _lvFindings.SelectedItems)
         {
             if (item.Tag is ScanFinding f)
             {
-                var res = f.FixAction(ctx, bm);
-                if (res.Success) fixedCount++;
+                _queueBar.Enqueue(new QueuedChange(
+                    $"qs_{f.Category}_{f.Title}",
+                    f.Title,
+                    $"[{f.Category}] {f.Title} → Исправить",
+                    () => f.FixAction(ctx, bm)));
             }
         }
-
-        OnStateChanged?.Invoke();
-        _ = RunScanAsync();
-        MessageBox.Show($"Успешно исправлено элементов: {fixedCount}.\nВсе изменения зафиксированы в резервной копии.", "Восстановление", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     private void FixAll()
