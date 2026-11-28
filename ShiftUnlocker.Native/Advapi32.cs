@@ -145,4 +145,15 @@ public static class Advapi32
         IntPtr psidGroup,
         IntPtr pDacl,
         IntPtr pSacl);
+
+    public const uint REG_NOTIFY_CHANGE_NAME = 0x00000001;
+    public const uint REG_NOTIFY_CHANGE_LAST_SET = 0x00000004;
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    public static extern int RegNotifyChangeKeyValue(
+        IntPtr hKey,
+        bool bWatchSubtree,
+        uint dwNotifyFilter,
+        IntPtr hEvent,
+        bool fAsynchronous);
 }

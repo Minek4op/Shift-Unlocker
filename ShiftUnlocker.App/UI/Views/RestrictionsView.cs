@@ -189,9 +189,12 @@ public class RestrictionsView : UserControl
         _btnRestoreAccessFiles = new RoundedButton { Text = "Восстановить файлы sethc.exe и Utilman.exe", Size = new Size(305, 32), Font = ThemeManager.BoldFont, IsPrimary = true, Margin = new Padding(2, 2, 6, 4) };
         _btnCheckAccess = new RoundedButton { Text = "Проверить статус", Size = new Size(140, 32), Margin = new Padding(2, 2, 6, 4) };
 
+        var btnCheck12 = new RoundedButton { Text = "Проверить 12 бинарников (SHA-256)", Size = new Size(255, 32), Margin = new Padding(2, 2, 6, 4) };
+        btnCheck12.Click += (s, e) => RunCheckAllSystemBinaries();
+
         accessTop.Controls.AddRange(new Control[]
         {
-            _btnSethcCmd, _btnSethcApp, _btnUtilmanCmd, _btnUtilmanApp, _btnRestoreAccess, _btnRestoreAccessFiles, _btnCheckAccess
+            _btnSethcCmd, _btnSethcApp, _btnUtilmanCmd, _btnUtilmanApp, _btnRestoreAccess, _btnRestoreAccessFiles, _btnCheckAccess, btnCheck12
         });
 
         var accessHeader = new Panel { Dock = DockStyle.Top, Height = 60, Padding = new Padding(8) };
@@ -745,6 +748,22 @@ public class RestrictionsView : UserControl
         var res = _systemRecovery.ReplaceUtilmanWithApp(ctx, bm, appPath);
         MessageBox.Show(res.Success ? "utilman.exe успешно перенаправлен на Shift Unlocker! Нажмите иконку специальных возможностей на экране входа для открытия Shift Unlocker." : res.ErrorMessage, "Замена utilman", MessageBoxButtons.OK, res.Success ? MessageBoxIcon.Information : MessageBoxIcon.Error);
         RefreshAccessibilityStatus();
+    }
+
+    private void RunCheckAllSystemBinaries()
+    {
+        var ctx = GetContext?.Invoke();
+        if (ctx == null) return;
+
+        var items = _systemRecovery.CheckSystemBinariesIntegrity(ctx);
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("Проверка системных бинарников (WinSxS SHA-256 + OriginalFilename + IFEO):");
+        sb.AppendLine(new string('-', 86));
+        foreach (var it in items)
+        {
+            sb.AppendLine($"{it.FileName,-18} | {it.StatusSummary}");
+        }
+        _txtAccessInfo.Text = sb.ToString();
     }
 
     private void RunRestoreAccessibility()

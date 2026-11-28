@@ -55,6 +55,15 @@ public class AutorunService
             // планировщик задач (xml в System32\Tasks)
             ScanScheduledTasks(ctx, list);
 
+            // расширенные точки автозапуска (COM, AppCompat, TimeProviders, PrintMonitors, Winsock LSP, PS-профили, ENV)
+            ScanComHijacks(ctx, list);
+            ScanAppCompatShims(ctx, list);
+            ScanTimeProviders(ctx, list);
+            ScanPrintMonitors(ctx, list);
+            ScanWinsockLsp(ctx, list);
+            ScanPowerShellProfiles(ctx, list);
+            ScanSuspiciousEnvVars(ctx, list);
+
             return list;
         }, ct);
     }
@@ -335,6 +344,255 @@ public class AutorunService
         catch
         {
             // ошибка обхода папки
+        }
+    }
+
+    private void ScanComHijacks(ITargetContext ctx, List<AutorunEntry> list)
+    {
+        try
+        {
+            const string clsidRoot = @"Software\Classes\CLSID";
+            foreach (var clsid in ctx.GetSubKeyNames("HKCU", clsidRoot).Take(300))
+            {
+                foreach (var srvType in new[] { "InprocServer32", "LocalServer32" })
+                {
+                    string subKey = $@"{clsidRoot}\{clsid}\{srvType}";
+                    object? val = ctx.GetValue("HKCU", subKey, "");
+                    if (val == null) continue;
+                    string cmd = val.ToString() ?? "";
+                    if (string.IsNullOrWhiteSpace(cmd)) continue;
+
+                    string resolved = ExtractExecutablePath(cmd, ctx);
+                    bool exists = File.Exists(resolved);
+                    var (susp, reason) = AnalyzeSuspicious(cmd, resolved, exists);
+                    list.Add(new AutorunEntry(
+                        Guid.NewGuid().ToString("N"),
+                        $"COM {clsid} ({srvType})",
+                        cmd,
+                        resolved,
+                        exists,
+                        "COM-Hijack (HKCU)",
+                        "HKCU",
+                        subKey,
+                        "",
+                        true,
+                        susp || !resolved.Contains(@"\Windows\", StringComparison.OrdinalIgnoreCase),
+                        susp ? reason : "HKCU COM-переопределение (проверьте источник)"));
+                }
+            }
+        }
+        catch { }
+    }
+
+    private void ScanAppCompatShims(ITargetContext ctx, List<AutorunEntry> list)
+    {
+        try
+        {
+            const string customKey = @"SOFTWARE\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Custom";
+            foreach (var exe in ctx.GetSubKeyNames("HKLM", customKey))
+            {
+                string sub = $@"{customKey}\{exe}";
+                foreach (var valName in ctx.GetValueNames("HKLM", sub))
+                {
+                    list.Add(new AutorunEntry(
+                        Guid.NewGuid().ToString("N"),
+                        $"AppCompat Shim: {exe}",
+                        valName,
+                        valName,
+                        File.Exists(valName),
+                        "AppCompat Shims",
+                        "HKLM",
+                        sub,
+                        valName,
+                        true,
+                        true,
+                        "Нестандартный AppCompat Shim (.sdb)"));
+                }
+            }
+        }
+        catch { }
+    }
+
+    private void ScanTimeProviders(ITargetContext ctx, List<AutorunEntry> list)
+    {
+        try
+        {
+            const string tpRoot = @"SYSTEM\CurrentControlSet\Services\W32Time\TimeProviders";
+            foreach (var prov in ctx.GetSubKeyNames("HKLM", tpRoot))
+            {
+                string sub = $@"{tpRoot}\{prov}";
+                string dll = ctx.GetValue("HKLM", sub, "DllName")?.ToString() ?? "";
+                if (string.IsNullOrWhiteSpace(dll)) continue;
+
+                string resolved = ExtractExecutablePath(dll, ctx);
+                bool exists = File.Exists(resolved);
+                bool nonStd = !resolved.Contains(@"\System32\w32time.dll", StringComparison.OrdinalIgnoreCase);
+                list.Add(new AutorunEntry(
+                    Guid.NewGuid().ToString("N"),
+                    $"TimeProvider: {prov}",
+                    dll,
+                    resolved,
+                    exists,
+                    "Time Providers",
+                    "HKLM",
+                    sub,
+                    "DllName",
+                    true,
+                    nonStd,
+                    nonStd ? "Нестандартный TimeProvider DLL" : ""));
+            }
+        }
+        catch { }
+    }
+
+    private void ScanPrintMonitors(ITargetContext ctx, List<AutorunEntry> list)
+    {
+        try
+        {
+            const string pmRoot = @"SYSTEM\CurrentControlSet\Control\Print\Monitors";
+            foreach (var mon in ctx.GetSubKeyNames("HKLM", pmRoot))
+            {
+                string sub = $@"{pmRoot}\{mon}";
+                string driver = ctx.GetValue("HKLM", sub, "Driver")?.ToString() ?? "";
+                if (string.IsNullOrWhiteSpace(driver)) continue;
+
+                string resolved = Path.IsPathRooted(driver) ? driver : Path.Combine(ctx.System32Directory, driver);
+                bool exists = File.Exists(resolved);
+                var (susp, reason) = AnalyzeSuspicious(driver, resolved, exists);
+                list.Add(new AutorunEntry(
+                    Guid.NewGuid().ToString("N"),
+                    $"PrintMonitor: {mon}",
+                    driver,
+                    resolved,
+                    exists,
+                    "Print Monitors",
+                    "HKLM",
+                    sub,
+                    "Driver",
+                    true,
+                    susp,
+                    reason));
+            }
+        }
+        catch { }
+    }
+
+    private void ScanWinsockLsp(ITargetContext ctx, List<AutorunEntry> list)
+    {
+        try
+        {
+            const string lspRoot = @"SYSTEM\CurrentControlSet\Services\WinSock2\Parameters\Protocol_Catalog9\Catalog_Entries";
+            foreach (var entry in ctx.GetSubKeyNames("HKLM", lspRoot))
+            {
+                string sub = $@"{lspRoot}\{entry}";
+                if (ctx.GetValue("HKLM", sub, "PackedCatalogItem") is byte[] bytes && bytes.Length > 10)
+                {
+                    // Первые 260 байт содержат ANSI-путь к DLL провайдера
+                    int end = Array.IndexOf(bytes, (byte)0);
+                    string rawPath = end > 0 ? System.Text.Encoding.ASCII.GetString(bytes, 0, Math.Min(end, 260)) : "";
+                    if (!string.IsNullOrWhiteSpace(rawPath))
+                    {
+                        string resolved = ExtractExecutablePath(rawPath, ctx);
+                        bool exists = File.Exists(resolved);
+                        var (susp, reason) = AnalyzeSuspicious(rawPath, resolved, exists);
+                        if (susp)
+                        {
+                            list.Add(new AutorunEntry(
+                                Guid.NewGuid().ToString("N"),
+                                $"Winsock LSP: {entry}",
+                                rawPath,
+                                resolved,
+                                exists,
+                                "Winsock LSP",
+                                "HKLM",
+                                sub,
+                                "PackedCatalogItem",
+                                true,
+                                true,
+                                reason));
+                        }
+                    }
+                }
+            }
+        }
+        catch { }
+    }
+
+    private void ScanPowerShellProfiles(ITargetContext ctx, List<AutorunEntry> list)
+    {
+        try
+        {
+            var candidates = new List<string>
+            {
+                Path.Combine(ctx.System32Directory, @"WindowsPowerShell\v1.0\profile.ps1"),
+                Path.Combine(ctx.System32Directory, @"WindowsPowerShell\v1.0\Microsoft.PowerShell_profile.ps1")
+            };
+
+            string usersDir = Path.Combine(ctx.TargetRootPath, "Users");
+            if (Directory.Exists(usersDir))
+            {
+                foreach (var uDir in Directory.GetDirectories(usersDir))
+                {
+                    candidates.Add(Path.Combine(uDir, @"Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1"));
+                    candidates.Add(Path.Combine(uDir, @"Documents\PowerShell\Microsoft.PowerShell_profile.ps1"));
+                }
+            }
+
+            foreach (var psPath in candidates.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                if (!File.Exists(psPath)) continue;
+                list.Add(new AutorunEntry(
+                    Guid.NewGuid().ToString("N"),
+                    $"PS Profile: {Path.GetFileName(psPath)}",
+                    psPath,
+                    psPath,
+                    true,
+                    "PowerShell Профили",
+                    "FS_STARTUP",
+                    psPath,
+                    Path.GetFileName(psPath),
+                    true,
+                    true,
+                    "Обнаружен скрипт автозапуска PowerShell-профиля"));
+            }
+        }
+        catch { }
+    }
+
+    private void ScanSuspiciousEnvVars(ITargetContext ctx, List<AutorunEntry> list)
+    {
+        string[] envNames = ["COR_PROFILER", "COR_PROFILER_PATH", "COR_ENABLE_PROFILING", "__COMPAT_LAYER"];
+        var scopes = new (string Hive, string Key)[]
+        {
+            ("HKCU", @"Environment"),
+            ("HKLM", @"SYSTEM\CurrentControlSet\Control\Session Manager\Environment")
+        };
+
+        foreach (var (hive, key) in scopes)
+        {
+            foreach (var env in envNames)
+            {
+                try
+                {
+                    object? val = ctx.GetValue(hive, key, env);
+                    if (val == null || string.IsNullOrWhiteSpace(val.ToString())) continue;
+                    string sVal = val.ToString()!;
+                    list.Add(new AutorunEntry(
+                        Guid.NewGuid().ToString("N"),
+                        $"ENV: {env}",
+                        sVal,
+                        sVal,
+                        File.Exists(sVal),
+                        "Переменные среды",
+                        hive,
+                        key,
+                        env,
+                        true,
+                        true,
+                        $"Потенциально опасная переменная среды ({env})"));
+                }
+                catch { }
+            }
         }
     }
 

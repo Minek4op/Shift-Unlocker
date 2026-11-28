@@ -183,7 +183,7 @@ public class RegEditorView : UserControl
         NavigateToAddress(path);
     }
 
-    private void NavigateToAddress(string fullPath)
+    public void NavigateToAddress(string fullPath)
     {
         _txtAddress.Text = fullPath;
         var ctx = GetContext?.Invoke();

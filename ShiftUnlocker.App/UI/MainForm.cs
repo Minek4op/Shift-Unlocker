@@ -352,7 +352,13 @@ public class MainForm : Form
         {
             GetContext = () => _targetContext,
             GetBackupManager = () => _backupManager,
-            OnStateChanged = UpdateStatusBar
+            GetQuarantineManager = () => _quarantineManager,
+            OnStateChanged = UpdateStatusBar,
+            OnJumpToRegistry = regPath =>
+            {
+                SwitchView(6);
+                v7.NavigateToAddress(regPath);
+            }
         };
 
         _views[0] = v1;

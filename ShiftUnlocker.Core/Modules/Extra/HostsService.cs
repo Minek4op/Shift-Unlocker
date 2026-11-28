@@ -41,6 +41,11 @@ public class HostsService
     public Result ResetHostsToDefault(ITargetContext ctx, BackupManager bm)
     {
         string path = GetHostsFilePath(ctx);
+        if (bm.DryRun)
+        {
+            bm.Log("Hosts", $"[DRY-RUN] Сброс hosts: {path}");
+            return Result.Ok();
+        }
         bm.BackupFile(path);
 
         try

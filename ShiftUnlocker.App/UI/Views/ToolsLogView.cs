@@ -23,6 +23,14 @@ public class ToolsLogView : UserControl
     private readonly RoundedButton _btnUndoLast;
     private readonly RoundedButton _btnUndoAll;
 
+    private readonly RoundedButton _btnFrstReport;
+    private readonly RoundedButton _btnSuScript;
+    private readonly RoundedButton _btnDeepSearch;
+    private readonly RoundedButton _btnBrowsers;
+    private readonly RoundedButton _btnAntiRootkit;
+    private readonly RoundedButton _btnDataRescue;
+    private readonly RoundedButton _btnGuard;
+
     private readonly Label _lblStatus;
 
     private readonly AutoHealWizardService _wizard = new();
@@ -30,10 +38,13 @@ public class ToolsLogView : UserControl
     private readonly PolicyResetService _policyReset = new();
     private readonly SystemReportService _reportService = new();
     private readonly QuickScanService _scanService = new();
+    private readonly ShiftUnlocker.Core.Security.RegistryGuardService _guardService = new();
 
     public Func<ITargetContext>? GetContext { get; set; }
     public Func<BackupManager>? GetBackupManager { get; set; }
+    public Func<QuarantineManager>? GetQuarantineManager { get; set; }
     public Action? OnStateChanged { get; set; }
+    public Action<string>? OnJumpToRegistry { get; set; }
 
     public ToolsLogView()
     {
@@ -58,12 +69,22 @@ public class ToolsLogView : UserControl
         // откат и статус
         _btnUndoLast = new RoundedButton { Text = "Откатить последнее (Undo)", Size = new Size(190, 28), Font = ThemeManager.BoldFont, Margin = new Padding(2, 2, 6, 4) };
         _btnUndoAll = new RoundedButton { Text = "Откатить ВСЕ", Size = new Size(120, 28), Margin = new Padding(2, 2, 6, 4) };
+
+        _btnFrstReport = new RoundedButton { Text = "FRST Отчет...", Size = new Size(125, 28), Margin = new Padding(2, 2, 6, 4) };
+        _btnSuScript = new RoundedButton { Text = "SU Script...", Size = new Size(110, 28), Margin = new Padding(2, 2, 6, 4) };
+        _btnDeepSearch = new RoundedButton { Text = "Глубокий поиск...", Size = new Size(150, 28), Margin = new Padding(2, 2, 6, 4) };
+        _btnBrowsers = new RoundedButton { Text = "Браузеры...", Size = new Size(115, 28), Margin = new Padding(2, 2, 6, 4) };
+        _btnAntiRootkit = new RoundedButton { Text = "Антируткит...", Size = new Size(130, 28), Margin = new Padding(2, 2, 6, 4) };
+        _btnDataRescue = new RoundedButton { Text = "Спасение данных...", Size = new Size(160, 28), Margin = new Padding(2, 2, 6, 4) };
+        _btnGuard = new RoundedButton { Text = "Страж (Guard): ВЫКЛ", Size = new Size(165, 28), Margin = new Padding(2, 2, 6, 4) };
+
         _lblStatus = new Label { Text = "Готов к работе.", AutoSize = true, ForeColor = ThemeManager.TextMutedColor, Margin = new Padding(4, 7, 4, 4) };
 
         topPanel.Controls.AddRange(new Control[]
         {
             lblProf, _btnDiagProfile, _btnSafeProfile, _btnFullProfile,
             lblTools, _btnResetHosts, _btnResetPolicies, _btnExportHtml, _btnExportTxt,
+            _btnFrstReport, _btnSuScript, _btnDeepSearch, _btnBrowsers, _btnAntiRootkit, _btnDataRescue, _btnGuard,
             _btnUndoLast, _btnUndoAll, _lblStatus
         });
 
@@ -100,6 +121,52 @@ public class ToolsLogView : UserControl
         _btnUndoLast.Click += (s, e) => UndoLast();
         _btnUndoAll.Click += (s, e) => UndoAll();
 
+        _btnFrstReport.Click += async (s, e) => await ExportFrstReport();
+        _btnSuScript.Click += (s, e) =>
+        {
+            var ctx = GetContext?.Invoke();
+            var bm = GetBackupManager?.Invoke();
+            var qm = GetQuarantineManager?.Invoke();
+            if (ctx != null && bm != null && qm != null)
+                new SuScriptDialog(ctx, bm, qm, () => { RefreshLogs(); OnStateChanged?.Invoke(); }).ShowDialog(this);
+        };
+        _btnDeepSearch.Click += (s, e) =>
+        {
+            var ctx = GetContext?.Invoke();
+            if (ctx != null) new DeepSearchDialog(ctx, OnJumpToRegistry).ShowDialog(this);
+        };
+        _btnBrowsers.Click += (s, e) =>
+        {
+            var ctx = GetContext?.Invoke();
+            var bm = GetBackupManager?.Invoke();
+            if (ctx != null && bm != null) new BrowserAuditDialog(ctx, bm, () => { RefreshLogs(); OnStateChanged?.Invoke(); }).ShowDialog(this);
+        };
+        _btnAntiRootkit.Click += (s, e) =>
+        {
+            var ctx = GetContext?.Invoke();
+            if (ctx != null) new AntiRootkitDialog(ctx).ShowDialog(this);
+        };
+        _btnDataRescue.Click += (s, e) =>
+        {
+            var ctx = GetContext?.Invoke();
+            if (ctx != null) new DataRescueDialog(ctx).ShowDialog(this);
+        };
+        _btnGuard.Click += (s, e) => ToggleGuard();
+
+        _guardService.OnKeyChanged += keyPath =>
+        {
+            if (IsHandleCreated)
+            {
+                BeginInvoke(() =>
+                {
+                    _lblStatus.Text = $"[Страж] Изменение в ключе: {keyPath}";
+                    var bm = GetBackupManager?.Invoke();
+                    bm?.Log("Guard", $"Зафиксировано изменение: {keyPath}");
+                    RefreshLogs();
+                });
+            }
+        };
+
         bool isAdmin = new System.Security.Principal.WindowsPrincipal(System.Security.Principal.WindowsIdentity.GetCurrent())
             .IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
         _btnSafeProfile.Enabled = isAdmin;
@@ -108,6 +175,44 @@ public class ToolsLogView : UserControl
         _btnResetPolicies.Enabled = isAdmin;
         _btnUndoLast.Enabled = isAdmin;
         _btnUndoAll.Enabled = isAdmin;
+        _btnSuScript.Enabled = isAdmin;
+    }
+
+    private void ToggleGuard()
+    {
+        if (_guardService.IsRunning)
+        {
+            _guardService.Stop();
+            _btnGuard.Text = "Страж (Guard): ВЫКЛ";
+            _lblStatus.Text = "Режим Стража остановлен.";
+        }
+        else
+        {
+            _guardService.Start();
+            _btnGuard.Text = "Страж (Guard): ВКЛ";
+            _lblStatus.Text = "Режим Стража активен (Run/Winlogon/IFEO).";
+        }
+    }
+
+    private async Task ExportFrstReport()
+    {
+        var ctx = GetContext?.Invoke();
+        var bm = GetBackupManager?.Invoke();
+        if (ctx == null || bm == null) return;
+
+        _lblStatus.Text = "Сбор расширенного отчета FRST/AVZ...";
+        string report = await _reportService.GenerateFrstStyleReportAsync(ctx, bm);
+        using var sfd = new SaveFileDialog { Filter = "Text (*.txt)|*.txt", FileName = $"SU_FRST_Report_{DateTime.Now:yyyyMMdd_HHmm}.txt" };
+        if (sfd.ShowDialog() == DialogResult.OK)
+        {
+            File.WriteAllText(sfd.FileName, report);
+            _lblStatus.Text = "FRST-отчет сохранен.";
+            MessageBox.Show("Расширенный отчет сохранен.", "FRST Отчет", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        else
+        {
+            _lblStatus.Text = "Готов к работе.";
+        }
     }
 
     public void RefreshLogs()

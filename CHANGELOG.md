@@ -1,5 +1,13 @@
 # Changelog
 
+## [Unreleased] — ЭТАП 2 (P1 функции)
+### Добавлено
+- Расширенное сканирование автозагрузки в `AutorunService`: COM-hijack (`HKCU\...\CLSID`), AppCompat shims, Time Providers, Print Monitors, Winsock LSP, PowerShell-профили, переменные среды (`COR_PROFILER`, `__COMPAT_LAYER`).
+- Расширенный FRST/AVZ-отчёт в `SystemReportService` и движок fixlist-скриптов **SU Script** (`SuScriptService`: `RegDelete`, `RegSet`, `FileQuarantine`, `FileDelete`, `ServiceDisable`, `TaskDisable`, `ProcessKill`, `HostsReset`, `ProxyReset`) с `Dry-Run` и Undo.
+- Проверка целостности 12 системных бинарников (`sethc`, `Utilman`, `osk`, `Narrator`, `Magnify`, `DisplaySwitch`, `AtBroker`, `cmd`, `explorer`, `Taskmgr`, `regedit`, `mmc`) по SHA-256 с `WinSxS`, `OriginalFilename` и IFEO.
+- Аудит браузеров (`BrowserAuditService`: расширения, `ExtensionInstallForcelist`, политики, прокси/PAC, ярлыки `--load-extension`, без чтения паролей/куки).
+- Антируткит Cross-View (`AntiRootkitService`), глубокий поиск по реестру/диску (`DeepSearchService`), мастер спасения данных (`DataRescueService`) и режим «Страж» (`RegistryGuardService` через `RegNotifyChangeKeyValue`).
+
 ## [Unreleased] — ЭТАП 1 (Интерфейс и UX)
 ### Добавлено
 - Главная панель сценариев «Что случилось?» в `QuickScanView` с переходом к нужному модулю и фильтру.

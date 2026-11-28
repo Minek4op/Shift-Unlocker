@@ -14,6 +14,17 @@ public record AccessibilityStatus(
     bool UtilmanIsReplaced,
     string UtilmanTarget);
 
+public record SystemBinaryIntegrityItem(
+    string FileName,
+    string FullPath,
+    bool Exists,
+    bool HasIfeoHijack,
+    string IfeoTarget,
+    string OriginalFilename,
+    bool IsSpoofedCmd,
+    bool MatchesWinSxS,
+    string StatusSummary);
+
 public class SystemRecoveryService
 {
     private const string FontSubstitutesPath = @"SOFTWARE\Microsoft\Windows NT\CurrentVersion\FontSubstitutes";
@@ -346,14 +357,125 @@ public class SystemRecoveryService
         try
         {
             if (!Directory.Exists(winSxS)) return null;
-            return Directory.EnumerateFiles(winSxS, fileName, SearchOption.AllDirectories)
-                .OrderByDescending(File.GetLastWriteTimeUtc)
-                .FirstOrDefault();
+            // Ищем только в папках компонентов amd64_/x86_, пропуская Manifests/Backup/Catalogs
+            foreach (var dir in Directory.EnumerateDirectories(winSxS, "amd64_*"))
+            {
+                string candidate = Path.Combine(dir, fileName);
+                if (File.Exists(candidate)) return candidate;
+            }
+            foreach (var dir in Directory.EnumerateDirectories(winSxS, "x86_*"))
+            {
+                string candidate = Path.Combine(dir, fileName);
+                if (File.Exists(candidate)) return candidate;
+            }
+            return null;
         }
         catch
         {
             return null;
         }
+    }
+
+    private static Dictionary<string, string> BuildWinSxSLookup(string winSxS, IEnumerable<string> fileNames)
+    {
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (!Directory.Exists(winSxS)) return map;
+        var wanted = new HashSet<string>(fileNames, StringComparer.OrdinalIgnoreCase);
+
+        try
+        {
+            foreach (var dir in Directory.EnumerateDirectories(winSxS))
+            {
+                string dirName = Path.GetFileName(dir);
+                if (!dirName.StartsWith("amd64_", StringComparison.OrdinalIgnoreCase) &&
+                    !dirName.StartsWith("x86_", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                foreach (var target in wanted)
+                {
+                    if (map.ContainsKey(target)) continue;
+                    string candidate = Path.Combine(dir, target);
+                    if (File.Exists(candidate))
+                        map[target] = candidate;
+                }
+
+                if (map.Count == wanted.Count) break;
+            }
+        }
+        catch { }
+
+        return map;
+    }
+
+    public List<SystemBinaryIntegrityItem> CheckSystemBinariesIntegrity(ITargetContext ctx)
+    {
+        string[] binaries =
+        [
+            "sethc.exe", "Utilman.exe", "osk.exe", "Narrator.exe", "Magnify.exe",
+            "DisplaySwitch.exe", "AtBroker.exe", "cmd.exe", "explorer.exe",
+            "Taskmgr.exe", "regedit.exe", "mmc.exe"
+        ];
+
+        string sys32 = ctx.System32Directory;
+        string winDir = ctx.WindowsDirectory;
+        string winSxS = Path.Combine(winDir, "WinSxS");
+        var winSxSMap = BuildWinSxSLookup(winSxS, binaries);
+        var fileMgr = new FileManagerService();
+        var results = new List<SystemBinaryIntegrityItem>();
+
+        foreach (var bin in binaries)
+        {
+            string fullPath = bin.Equals("explorer.exe", StringComparison.OrdinalIgnoreCase) ||
+                              bin.Equals("regedit.exe", StringComparison.OrdinalIgnoreCase)
+                ? (File.Exists(Path.Combine(winDir, bin)) ? Path.Combine(winDir, bin) : Path.Combine(sys32, bin))
+                : Path.Combine(sys32, bin);
+
+            bool exists = File.Exists(fullPath);
+            string ifeoKey = $@"{IfeoBase}\{bin}";
+            string ifeoTarget = ctx.GetValue("HKLM", ifeoKey, "Debugger")?.ToString() ?? "";
+            bool hasIfeo = !string.IsNullOrWhiteSpace(ifeoTarget);
+
+            string origName = "";
+            bool isSpoofedCmd = false;
+            bool matchesWinSxS = true;
+
+            if (exists)
+            {
+                try
+                {
+                    var fvi = FileVersionInfo.GetVersionInfo(fullPath);
+                    origName = fvi.OriginalFilename ?? "";
+                    if (!bin.Equals("cmd.exe", StringComparison.OrdinalIgnoreCase) &&
+                        origName.Contains("cmd.exe", StringComparison.OrdinalIgnoreCase))
+                    {
+                        isSpoofedCmd = true;
+                    }
+                }
+                catch { }
+
+                winSxSMap.TryGetValue(bin, out string? refPath);
+                if (refPath != null && File.Exists(refPath))
+                {
+                    var liveHash = fileMgr.CalculateHashes(fullPath).Sha256;
+                    var refHash = fileMgr.CalculateHashes(refPath).Sha256;
+                    if (!string.IsNullOrEmpty(liveHash) && !string.IsNullOrEmpty(refHash) && liveHash != "Error")
+                    {
+                        matchesWinSxS = string.Equals(liveHash, refHash, StringComparison.OrdinalIgnoreCase);
+                    }
+                }
+            }
+
+            string summary = !exists ? "Отсутствует"
+                : isSpoofedCmd ? $"ПОДМЕНА НА CMD.EXE ({origName})"
+                : hasIfeo ? $"IFEO перехват -> {ifeoTarget}"
+                : !matchesWinSxS ? "Не совпадает SHA-256 с WinSxS"
+                : "Норма";
+
+            results.Add(new SystemBinaryIntegrityItem(
+                bin, fullPath, exists, hasIfeo, ifeoTarget, origName, isSpoofedCmd, matchesWinSxS, summary));
+        }
+
+        return results;
     }
 
     public Result RunSfcScan(ITargetContext ctx)
