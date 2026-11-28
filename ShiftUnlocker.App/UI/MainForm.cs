@@ -243,6 +243,10 @@ public class MainForm : Form
             {
                 if (c is Label lbl && lbl.Tag is string k) lbl.Text = LangManager.T(k);
             }
+            foreach (var v in _views)
+            {
+                LangManager.ApplyLanguage(v);
+            }
         };
 
         // основная область
@@ -370,31 +374,6 @@ public class MainForm : Form
         _views[6] = v7;
         _views[7] = v8;
         _views[8] = v9;
-
-        v1.OnScenarioSelected = scenario =>
-        {
-            switch (scenario)
-            {
-                case "tools_blocked":
-                    SwitchView(4);
-                    v5.SelectCategory("Инструменты");
-                    break;
-                case "usb_shortcuts":
-                    SwitchView(4);
-                    v5.SelectCategory("Накопители");
-                    break;
-                case "banner":
-                    SwitchView(1);
-                    v2.SetSuspiciousFilter();
-                    break;
-                case "encrypted":
-                    SwitchView(7);
-                    break;
-                case "noboot":
-                    SwitchView(3);
-                    break;
-            }
-        };
     }
 
     public void SwitchView(int index)

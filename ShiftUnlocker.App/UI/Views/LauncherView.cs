@@ -16,7 +16,6 @@ public class LauncherView : UserControl
     private readonly RoundedButton _btnRemoveExe;
     private readonly RoundedButton _btnOpenToolsFolder;
     private readonly RoundedButton _btnRefresh;
-    private readonly CheckBox _chkRandomName;
 
     private readonly RoundedButton _btnSfc;
     private readonly RoundedButton _btnDiskCleanup;
@@ -35,7 +34,6 @@ public class LauncherView : UserControl
         var topPanel = new RoundedFlowPanel { Dock = DockStyle.Top };
 
         _btnLaunch = new RoundedButton { Text = "Запустить утилиту", Size = new Size(160, 32), Font = ThemeManager.BoldFont, IsPrimary = true, Margin = new Padding(2, 2, 8, 4) };
-        _chkRandomName = new CheckBox { Text = "Запуск под случайным именем", AutoSize = true, Checked = true, Margin = new Padding(4, 7, 8, 4) };
         _btnAddExe = new RoundedButton { Text = "Добавить .exe...", Size = new Size(130, 32), Margin = new Padding(2, 2, 8, 4) };
         _btnRemoveExe = new RoundedButton { Text = "Удалить добавленную", Size = new Size(165, 32), Margin = new Padding(2, 2, 8, 4) };
         _btnOpenToolsFolder = new RoundedButton { Text = "Папка Tools", Size = new Size(110, 32), Margin = new Padding(2, 2, 8, 4) };
@@ -47,7 +45,7 @@ public class LauncherView : UserControl
 
         topPanel.Controls.AddRange(new Control[]
         {
-            _btnLaunch, _chkRandomName, _btnAddExe, _btnRemoveExe, _btnOpenToolsFolder, _btnRefresh,
+            _btnLaunch, _btnAddExe, _btnRemoveExe, _btnOpenToolsFolder, _btnRefresh,
             _btnSfc, _btnDiskCleanup, _btnLogoff
         });
 
@@ -181,7 +179,7 @@ public class LauncherView : UserControl
                 return;
             }
 
-            var res = _launcherService.LaunchUtility(item, _chkRandomName.Checked);
+            var res = _launcherService.LaunchUtility(item with { RunRandomName = false }, false);
             if (!res.Success)
             {
                 MessageBox.Show(res.ErrorMessage, "Ошибка запуска", MessageBoxButtons.OK, MessageBoxIcon.Error);

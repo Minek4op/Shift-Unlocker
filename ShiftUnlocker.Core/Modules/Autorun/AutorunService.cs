@@ -365,6 +365,8 @@ public class AutorunService
                     string resolved = ExtractExecutablePath(cmd, ctx);
                     bool exists = File.Exists(resolved);
                     var (susp, reason) = AnalyzeSuspicious(cmd, resolved, exists);
+                    if (!susp) continue;
+
                     list.Add(new AutorunEntry(
                         Guid.NewGuid().ToString("N"),
                         $"COM {clsid} ({srvType})",
@@ -376,8 +378,8 @@ public class AutorunService
                         subKey,
                         "",
                         true,
-                        susp || !resolved.Contains(@"\Windows\", StringComparison.OrdinalIgnoreCase),
-                        susp ? reason : "HKCU COM-переопределение (проверьте источник)"));
+                        true,
+                        reason));
                 }
             }
         }
@@ -426,7 +428,10 @@ public class AutorunService
 
                 string resolved = ExtractExecutablePath(dll, ctx);
                 bool exists = File.Exists(resolved);
-                bool nonStd = !resolved.Contains(@"\System32\w32time.dll", StringComparison.OrdinalIgnoreCase);
+                bool nonStd = !resolved.Contains(@"\System32\w32time.dll", StringComparison.OrdinalIgnoreCase) &&
+                              !resolved.Contains(@"\System32\vmictimeprovider.dll", StringComparison.OrdinalIgnoreCase);
+                if (!nonStd) continue;
+
                 list.Add(new AutorunEntry(
                     Guid.NewGuid().ToString("N"),
                     $"TimeProvider: {prov}",
@@ -438,8 +443,8 @@ public class AutorunService
                     sub,
                     "DllName",
                     true,
-                    nonStd,
-                    nonStd ? "Нестандартный TimeProvider DLL" : ""));
+                    true,
+                    "Нестандартный TimeProvider DLL"));
             }
         }
         catch { }
@@ -459,6 +464,8 @@ public class AutorunService
                 string resolved = Path.IsPathRooted(driver) ? driver : Path.Combine(ctx.System32Directory, driver);
                 bool exists = File.Exists(resolved);
                 var (susp, reason) = AnalyzeSuspicious(driver, resolved, exists);
+                if (!susp) continue;
+
                 list.Add(new AutorunEntry(
                     Guid.NewGuid().ToString("N"),
                     $"PrintMonitor: {mon}",
@@ -470,7 +477,7 @@ public class AutorunService
                     sub,
                     "Driver",
                     true,
-                    susp,
+                    true,
                     reason));
             }
         }

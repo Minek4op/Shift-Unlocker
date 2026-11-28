@@ -1,3 +1,6 @@
+using System.Windows.Forms;
+using ShiftUnlocker.App.UI.Controls;
+
 namespace ShiftUnlocker.App.UI;
 
 public enum AppLanguage
@@ -133,5 +136,277 @@ public static class LangManager
     {
         CurrentLanguage = CurrentLanguage == AppLanguage.Ru ? AppLanguage.En : AppLanguage.Ru;
         LanguageChanged?.Invoke();
+    }
+
+    private static readonly (string Ru, string En)[] UiPairs =
+    [
+        // Column headers
+        ("№", "#"),
+        ("PID", "PID"),
+        ("Акт.?", "Active?"),
+        ("Активен", "Active"),
+        ("Атрибуты", "Attributes"),
+        ("Внешний адрес:порт", "Remote Address:Port"),
+        ("Время", "Time"),
+        ("Данные", "Data"),
+        ("Дата изменения", "Modified"),
+        ("Дата изоляции", "Quarantined"),
+        ("Дескрипторов", "Handles"),
+        ("Имя записи", "Entry Name"),
+        ("Имя значения", "Value Name"),
+        ("Имя пользователя", "Username"),
+        ("Имя процесса", "Process Name"),
+        ("Имя службы", "Service Name"),
+        ("Имя файла / папки", "File / Folder Name"),
+        ("Имя файла", "File Name"),
+        ("Исходный путь", "Original Path"),
+        ("Категория", "Category"),
+        ("Команда / Файл", "Command / File"),
+        ("Комментарий", "Comment"),
+        ("Локальный адрес:порт", "Local Address:Port"),
+        ("Название утилиты", "Utility Name"),
+        ("Начальный LBA", "Start LBA"),
+        ("Не-Microsoft?", "Non-Microsoft?"),
+        ("Ограничение / Блокировка", "Restriction / Lock"),
+        ("Операция / Изменение", "Operation / Change"),
+        ("Описание воздействия", "Impact Description"),
+        ("Описание и последствия", "Description & Impact"),
+        ("Описание", "Description"),
+        ("Отображаемое имя", "Display Name"),
+        ("Память (МБ)", "Memory (MB)"),
+        ("Подозрительность", "Suspicion"),
+        ("Полное имя", "Full Name"),
+        ("Потоков", "Threads"),
+        ("Причина", "Reason"),
+        ("Проблема", "Issue"),
+        ("Протокол", "Protocol"),
+        ("Путь к исполняемому файлу", "Executable Path"),
+        ("Путь к образу (ImagePath)", "Image Path"),
+        ("Размер", "Size"),
+        ("Расположение / Источник", "Location / Source"),
+        ("Риск", "Risk"),
+        ("Роль / Группа", "Role / Group"),
+        ("Состояние", "State"),
+        ("Статус безопасности", "Security Status"),
+        ("Статус", "Status"),
+        ("Текущее значение", "Current Value"),
+        ("Тип запуска", "Startup Type"),
+        ("Тип", "Type"),
+        ("Требуется пароль", "Password Required"),
+        ("Файл есть?", "File Exists?"),
+        ("Эвристика / Описание", "Heuristic / Description"),
+
+        // ListViewGroups
+        ("Встроенные ограничения (система)", "Built-in Restrictions (System)"),
+        ("Встроенные системные утилиты", "Built-in System Utilities"),
+        ("Добавленные пользователем", "User Added"),
+        ("Обнаруженные утилиты (папка Tools)", "Discovered Utilities (Tools folder)"),
+        ("Пользовательские ограничения (добавленные вами)", "Custom Restrictions (User Added)"),
+
+        // TabPages
+        ("Процессы", "Processes"),
+        ("Сетевые соединения", "Network Connections"),
+        ("Службы и драйверы", "Services & Drivers"),
+        ("Ограничения и Политики", "Restrictions & Policies"),
+        ("Шрифты, Тема и Язык", "Fonts, Theme & Language"),
+        ("Замена Sethc и Utilman", "Sethc & Utilman Replacement"),
+        ("Управление пользователями", "User Management"),
+
+        // Buttons, Labels, CheckBoxes
+        ("➕ Создать пользователя...", "➕ Create User..."),
+        (".reg импорт", ".reg Import"),
+        (".reg экспорт", ".reg Export"),
+        ("+ Добавить свое...", "+ Add Custom..."),
+        ("+ Папка", "+ Folder"),
+        ("< Назад", "< Back"),
+        ("⟳ Обновить", "⟳ Refresh"),
+        ("❌ Удалить", "❌ Delete"),
+        ("1. Диагностика", "1. Diagnostics"),
+        ("2. Безопасное лечение", "2. Safe Healing"),
+        ("3. Полное исправление", "3. Full Repair"),
+        ("BCD / SafeMode / WinRE...", "BCD / SafeMode / WinRE..."),
+        ("bcdboot (ESP/MBR)", "bcdboot (ESP/MBR)"),
+        ("bootsect /mbr", "bootsect /mbr"),
+        ("EVTX / Сеть / Кэш...", "EVTX / Network / Cache..."),
+        ("FRST Отчет...", "FRST Report..."),
+        ("Offline DISM", "Offline DISM"),
+        ("Offline SFC", "Offline SFC"),
+        ("sfc /scannow", "sfc /scannow"),
+        ("SU Script...", "SU Script..."),
+        ("Анализ аномалий и угроз загрузчика:", "Bootloader anomalies and threats analysis:"),
+        ("Антируткит...", "Anti-Rootkit..."),
+        ("Ассоциации .exe/.bat/.reg", "Associations .exe/.bat/.reg"),
+        ("Блокнот", "Notepad"),
+        ("Браузеры...", "Browsers..."),
+        ("Быстрое сканирование", "Quick Scan"),
+        ("Бэкап MBR в файл", "Backup MBR to File"),
+        ("В карантин", "Quarantine"),
+        ("В очередь исправлений", "Add to Fix Queue"),
+        ("Вверх", "Up"),
+        ("Вкл / Выкл запись", "Enable / Disable Entry"),
+        ("Включить", "Enable"),
+        ("Возобновить", "Resume"),
+        ("Восстановить (IFEO / .bak)", "Restore (IFEO / .bak)"),
+        ("Восстановить MBR...", "Restore MBR..."),
+        ("Восстановить файл", "Restore File"),
+        ("Восстановить файлы sethc.exe и Utilman.exe", "Restore original sethc.exe & Utilman.exe"),
+        ("Вперед >", "Forward >"),
+        ("Выйти из пользователя", "Log Off User"),
+        ("Глубокий поиск...", "Deep Search..."),
+        ("Готов к работе.", "Ready."),
+        ("Готово к сканированию точек автозапуска.", "Ready to scan autorun entries."),
+        ("Диски:", "Drives:"),
+        ("Добавить .exe...", "Add .exe..."),
+        ("Заблокировать", "Lock"),
+        ("Завершить дерево", "Kill Process Tree"),
+        ("Завершить", "Kill Process"),
+        ("Закладки вирусов:", "Malware Hijacks:"),
+        ("Закрыть", "Close"),
+        ("Заменить sethc на CMD (Shift x5)", "Replace sethc with CMD (Shift x5)"),
+        ("Заменить sethc на Shift Unlocker", "Replace sethc with Shift Unlocker"),
+        ("Заменить utilman на CMD (Win+U)", "Replace utilman with CMD (Win+U)"),
+        ("Заменить utilman на Shift Unlocker", "Replace utilman with Shift Unlocker"),
+        ("Записать", "Write"),
+        ("Запуск: Авто", "Startup: Auto"),
+        ("Запуск: Вручную", "Startup: Manual"),
+        ("Запустить утилиту", "Launch Utility"),
+        ("Инструменты:", "Tools:"),
+        ("Исправить ВСЕ (Рекомендуется)", "Fix ALL (Recommended)"),
+        ("Карантин...", "Quarantine..."),
+        ("Категория:", "Category:"),
+        ("Киллер по имени (Watchdog)", "Kill by Name (Watchdog)"),
+        ("Мастер лечения:", "Healing Wizard:"),
+        ("Новая задача", "New Task"),
+        ("Обновить службы", "Refresh Services"),
+        ("Обновить соединения", "Refresh Connections"),
+        ("Обновить", "Refresh"),
+        ("ОСТАНОВИТЬ Watchdog", "STOP Watchdog"),
+        ("Откатить ВСЕ", "Undo ALL"),
+        ("Откатить последнее (Undo)", "Undo Last"),
+        ("Отключить службу", "Disable Service"),
+        ("Отключить", "Disable"),
+        ("Открыть / Запустить", "Open / Run"),
+        ("Отмена", "Cancel"),
+        ("Отчет HTML", "HTML Report"),
+        ("Отчет TXT", "TXT Report"),
+        ("Пакет форума (ZIP)", "Forum Pack (ZIP)"),
+        ("Папка Tools", "Tools Folder"),
+        ("Пауза", "Pause"),
+        ("Переименовать", "Rename"),
+        ("Перейти", "Go"),
+        ("Поиск:", "Search:"),
+        ("Права (Take Ownership)", "Permissions (Take Ownership)"),
+        ("Проверить 12 бинарников (SHA-256)", "Verify 12 Binaries (SHA-256)"),
+        ("Проверить статус", "Check Status"),
+        ("Проводник Windows", "Windows Explorer"),
+        ("Профили / MFT...", "Profiles / MFT..."),
+        ("Прочитать сектор 0 (MBR)", "Read Sector 0 (MBR)"),
+        ("Путь:", "Path:"),
+        ("Разблокировать ВСЕ", "Unlock ALL"),
+        ("Разблокировать", "Unlock"),
+        ("Сбросить GroupPolicy", "Reset GroupPolicy"),
+        ("Сбросить hosts", "Reset hosts"),
+        ("Сбросить Proxy", "Reset Proxy"),
+        ("Скриншот в журнал", "Screenshot to Log"),
+        ("Снять скрытые атрибуты папки", "Clear Folder Hidden Attributes"),
+        ("Снять Скрытый/Системный", "Clear Hidden/System"),
+        ("Сохранить", "Save"),
+        ("Спасение данных...", "Data Rescue..."),
+        ("Стать владельцем", "Take Ownership"),
+        ("Страж (Guard): ВКЛ", "Guard: ON"),
+        ("Страж (Guard): ВЫКЛ", "Guard: OFF"),
+        ("Таблица разделов MBR / GPT:", "MBR / GPT Partition Table:"),
+        ("Удаление дисков...", "Drive Removal..."),
+        ("Удалить добавленную", "Remove Added"),
+        ("Удалить заблокированный", "Delete Locked"),
+        ("Удалить навсегда", "Delete Permanently"),
+        ("Удалить свое", "Delete Custom"),
+        ("Удалить", "Delete"),
+        ("Удалять параметр при разблокировке", "Delete value on unlock"),
+        ("Физический накопитель:", "Physical Drive:"),
+        ("Фильтр:", "Filter:"),
+        ("Шестнадцатеричный дамп сектора 0 (512 байт MBR):", "Hex Dump of Sector 0 (512 bytes MBR):"),
+        ("Шифровальщики...", "Ransomware..."),
+        ("Экспорт TXT", "Export TXT"),
+        ("🇷🇺 Вернуть русский язык (CP1251)", "🇷🇺 Restore Russian Locale (CP1251)"),
+        ("🎨 Вернуть в стандартную тему", "🎨 Restore Default Theme"),
+        ("💾 Удаление дисков...", "💾 Drive Removal..."),
+        ("🔑 Сброс пароля", "🔑 Reset Password"),
+        ("🔤 Исправление шрифтов", "🔤 Fix Fonts"),
+        ("🚪 Выйти из пользователя", "🚪 Log Off User"),
+        ("🛡️ Сделать Админом", "🛡️ Make Admin"),
+        ("Откройте вкладку ещё раз или нажмите Обновить, если автосканирование не запустилось.", "Re-open the tab or click Refresh if auto-scan did not start.")
+    ];
+
+    private static readonly Dictionary<string, string> RuToEn = BuildMap(toEn: true);
+    private static readonly Dictionary<string, string> EnToRu = BuildMap(toEn: false);
+
+    private static Dictionary<string, string> BuildMap(bool toEn)
+    {
+        var dict = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (ru, en) in UiPairs)
+        {
+            if (toEn)
+                dict.TryAdd(ru, en);
+            else
+                dict.TryAdd(en, ru);
+        }
+        return dict;
+    }
+
+    public static string TranslateText(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return text;
+        var map = CurrentLanguage == AppLanguage.En ? RuToEn : EnToRu;
+        return map.TryGetValue(text, out var translated) ? translated : text;
+    }
+
+    public static void ApplyLanguage(Control root)
+    {
+        if (root == null) return;
+
+        if (!string.IsNullOrEmpty(root.Text))
+        {
+            var translated = TranslateText(root.Text);
+            if (!string.Equals(root.Text, translated, StringComparison.Ordinal))
+                root.Text = translated;
+        }
+
+        if (root is ListView lv)
+        {
+            foreach (ColumnHeader col in lv.Columns)
+            {
+                if (!string.IsNullOrEmpty(col.Text))
+                {
+                    var t = TranslateText(col.Text);
+                    if (!string.Equals(col.Text, t, StringComparison.Ordinal))
+                        col.Text = t;
+                }
+            }
+            foreach (ListViewGroup grp in lv.Groups)
+            {
+                if (!string.IsNullOrEmpty(grp.Header))
+                {
+                    var t = TranslateText(grp.Header);
+                    if (!string.Equals(grp.Header, t, StringComparison.Ordinal))
+                        grp.Header = t;
+                }
+            }
+        }
+        else if (root is RoundedTabControl rtc)
+        {
+            foreach (var page in rtc.TabPages)
+            {
+                if (!string.IsNullOrEmpty(page.Title))
+                    page.Title = TranslateText(page.Title);
+                ApplyLanguage(page);
+            }
+            rtc.UpdateTheme();
+        }
+
+        foreach (Control child in root.Controls)
+        {
+            ApplyLanguage(child);
+        }
     }
 }

@@ -24,54 +24,11 @@ public class QuickScanView : UserControl
     public Func<ITargetContext>? GetContext { get; set; }
     public Func<BackupManager>? GetBackupManager { get; set; }
     public Action? OnStateChanged { get; set; }
-    public Action<string>? OnScenarioSelected { get; set; }
 
     public QuickScanView()
     {
         Dock = DockStyle.Fill;
         Padding = new Padding(8);
-
-        // Панель сценариев "Что случилось?"
-        var scenarioPanel = new RoundedFlowPanel
-        {
-            Dock = DockStyle.Top,
-            Margin = new Padding(0, 0, 0, 6)
-        };
-        var lblScenario = new Label
-        {
-            Text = LangManager.T("what_happened"),
-            AutoSize = true,
-            Font = ThemeManager.BoldFont,
-            Margin = new Padding(2, 6, 8, 4)
-        };
-        scenarioPanel.Controls.Add(lblScenario);
-
-        var scenarios = new (string Id, string Key)[]
-        {
-            ("tools_blocked", "sc_tools_blocked"),
-            ("usb_shortcuts", "sc_usb_shortcuts"),
-            ("banner", "sc_banner"),
-            ("encrypted", "sc_encrypted"),
-            ("noboot", "sc_noboot"),
-            ("fullcheck", "sc_fullcheck")
-        };
-
-        foreach (var (id, key) in scenarios)
-        {
-            string scId = id;
-            var btn = new RoundedButton
-            {
-                Text = LangManager.T(key),
-                Size = new Size(250, 28),
-                Margin = new Padding(2, 2, 6, 4)
-            };
-            btn.Click += (s, e) =>
-            {
-                if (scId == "fullcheck") _ = RunScanAsync();
-                else OnScenarioSelected?.Invoke(scId);
-            };
-            scenarioPanel.Controls.Add(btn);
-        }
 
         var topPanel = new RoundedFlowPanel { Dock = DockStyle.Top };
 
@@ -155,7 +112,6 @@ public class QuickScanView : UserControl
 
         Controls.Add(centerPanel);
         Controls.Add(topPanel);
-        Controls.Add(scenarioPanel);
 
         _btnScan.Click += async (s, e) => await RunScanAsync();
         _btnFixSelected.Click += (s, e) => FixSelected();
