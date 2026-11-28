@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using Microsoft.Win32;
 using ShiftUnlocker.Core.Common;
 using ShiftUnlocker.Core.Context;
@@ -116,17 +117,44 @@ public class SystemRecoveryService
         return errors.Count == 0 ? Result.Ok() : Result.Fail("Ошибки при восстановлении некоторых шрифтов: " + string.Join("; ", errors));
     }
 
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern bool SystemParametersInfo(uint uiAction, uint uiParam, string pvParam, uint fWinIni);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, IntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out IntPtr lpdwResult);
+
     public Result RestoreDefaultTheme(ITargetContext ctx, BackupManager bm)
     {
+        string aeroTheme = Path.Combine(ctx.WindowsDirectory, "Resources", "Themes", "aero.theme");
+        string defaultWallpaper = Path.Combine(ctx.WindowsDirectory, "Web", "Wallpaper", "Windows", "img0.jpg");
+        string wallpaperValue = File.Exists(defaultWallpaper) ? defaultWallpaper : "";
+
         // сбрасываем тему на aero.theme
         bm.BackupAndSetRegistryValue(ctx, "HKCU", ThemesPath, "ThemeDir", @"%SystemRoot%\resources\Themes", RegistryValueKind.ExpandString, "Reset ThemeDir");
         bm.BackupAndSetRegistryValue(ctx, "HKCU", ThemesPath, "CurrentTheme", @"%SystemRoot%\resources\Themes\aero.theme", RegistryValueKind.ExpandString, "Reset CurrentTheme to aero.theme");
         bm.BackupAndSetRegistryValue(ctx, "HKCU", ThemesPath, "NewThemeInstalled", 0, RegistryValueKind.DWord, "Reset NewThemeInstalled");
 
+        // сбрасываем ThemeManager и Personalize (светлая тема, прозрачность)
+        const string themeManagerPath = @"Software\Microsoft\Windows\CurrentVersion\ThemeManager";
+        bm.BackupAndSetRegistryValue(ctx, "HKCU", themeManagerPath, "ThemeActive", "1", RegistryValueKind.String, "Enable ThemeActive");
+        bm.BackupAndSetRegistryValue(ctx, "HKCU", themeManagerPath, "DllName", @"%SystemRoot%\resources\Themes\Aero\Aero.msstyles", RegistryValueKind.ExpandString, "Reset Aero.msstyles");
+        bm.BackupAndSetRegistryValue(ctx, "HKCU", themeManagerPath, "ColorName", "NormalColor", RegistryValueKind.String, "Reset ColorName");
+        bm.BackupAndSetRegistryValue(ctx, "HKCU", themeManagerPath, "SizeName", "NormalSize", RegistryValueKind.String, "Reset SizeName");
+
+        const string personalizePath = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
+        bm.BackupAndSetRegistryValue(ctx, "HKCU", personalizePath, "AppsUseLightTheme", 1, RegistryValueKind.DWord, "Reset AppsUseLightTheme");
+        bm.BackupAndSetRegistryValue(ctx, "HKCU", personalizePath, "SystemUsesLightTheme", 1, RegistryValueKind.DWord, "Reset SystemUsesLightTheme");
+        bm.BackupAndSetRegistryValue(ctx, "HKCU", personalizePath, "EnableTransparency", 1, RegistryValueKind.DWord, "Enable Transparency");
+        bm.BackupAndSetRegistryValue(ctx, "HKCU", personalizePath, "ColorPrevalence", 0, RegistryValueKind.DWord, "Reset ColorPrevalence");
+
+        // отключаем высокую контрастность, если была включена
+        const string highContrastPath = @"Control Panel\Accessibility\HighContrast";
+        bm.BackupAndSetRegistryValue(ctx, "HKCU", highContrastPath, "Flags", "122", RegistryValueKind.String, "Disable High Contrast");
+
         // сбрасываем обои
         bm.BackupAndSetRegistryValue(ctx, "HKCU", DesktopPath, "TileWallpaper", "0", RegistryValueKind.String, "Reset TileWallpaper");
-        bm.BackupAndSetRegistryValue(ctx, "HKCU", DesktopPath, "WallpaperStyle", "2", RegistryValueKind.String, "Reset WallpaperStyle");
-        bm.BackupAndSetRegistryValue(ctx, "HKCU", DesktopPath, "Wallpaper", "", RegistryValueKind.String, "Cleared Wallpaper");
+        bm.BackupAndSetRegistryValue(ctx, "HKCU", DesktopPath, "WallpaperStyle", "10", RegistryValueKind.String, "Reset WallpaperStyle");
+        bm.BackupAndSetRegistryValue(ctx, "HKCU", DesktopPath, "Wallpaper", wallpaperValue, RegistryValueKind.String, "Reset Wallpaper");
 
         // стандартные цвета окон
         const string colorsPath = @"Control Panel\Colors";
@@ -136,14 +164,28 @@ public class SystemRecoveryService
         bm.BackupAndSetRegistryValue(ctx, "HKCU", colorsPath, "Menu", "240 240 240", RegistryValueKind.String, "Reset Menu color");
         bm.BackupAndSetRegistryValue(ctx, "HKCU", colorsPath, "MenuText", "0 0 0", RegistryValueKind.String, "Reset MenuText color");
 
-        // запускаем службу Themes
+        // применяем тему и обои в реальном времени
         if (ctx.IsOnline)
         {
             RunCommandHidden("sc", "config Themes start= auto");
             RunCommandHidden("net", "start Themes");
+
             try
             {
-                RunCommandHidden("rundll32.exe", "themeui.dll,ThemeChangeNotify");
+                const uint SPI_SETDESKWALLPAPER = 0x0014;
+                const uint SPIF_UPDATEINIFILE = 0x01;
+                const uint SPIF_SENDCHANGE = 0x02;
+                SystemParametersInfo(SPI_SETDESKWALLPAPER, 0, wallpaperValue, SPIF_UPDATEINIFILE | SPIF_SENDCHANGE);
+
+                const uint WM_SETTINGCHANGE = 0x001A;
+                const uint SMTO_ABORTIFHUNG = 0x0002;
+                SendMessageTimeout(new IntPtr(0xFFFF), WM_SETTINGCHANGE, IntPtr.Zero, "ImmersiveColorSet", SMTO_ABORTIFHUNG, 2000, out _);
+                SendMessageTimeout(new IntPtr(0xFFFF), WM_SETTINGCHANGE, IntPtr.Zero, "WindowsThemeElement", SMTO_ABORTIFHUNG, 2000, out _);
+
+                if (File.Exists(aeroTheme))
+                {
+                    RunCommandHidden("rundll32.exe", $"shell32.dll,Control_RunDLL desk.cpl desk,@Themes /Action:OpenTheme /file:\"{aeroTheme}\"");
+                }
             }
             catch { }
         }

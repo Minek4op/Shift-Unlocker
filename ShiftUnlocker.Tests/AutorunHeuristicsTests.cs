@@ -1,3 +1,4 @@
+using ShiftUnlocker.Core.Context;
 using ShiftUnlocker.Core.Modules.Autorun;
 using Xunit;
 
@@ -40,5 +41,16 @@ public class AutorunHeuristicsTests
 
         Assert.Equal(3, result.Count);
         Assert.Equal(["1", "3", "5"], result.Select(x => x.Id).ToArray());
+    }
+
+    [Theory]
+    [InlineData(@"C:\Windows\System32\userinit.exe,", @"C:\Windows\System32\userinit.exe")]
+    [InlineData(@"C:\Windows\System32\shell32.dll,Control_RunDLL", @"C:\Windows\System32\shell32.dll")]
+    [InlineData("\"C:\\Windows\\System32\\notepad.exe\",0", @"C:\Windows\System32\notepad.exe")]
+    public void ExtractExecutablePath_ShouldStripTrailingCommasAndIndexes(string raw, string expected)
+    {
+        var ctx = new OnlineTargetContext();
+        string actual = AutorunService.ExtractExecutablePath(raw, ctx);
+        Assert.Equal(expected, actual, ignoreCase: true);
     }
 }

@@ -730,19 +730,38 @@ public class AutorunService
             int nextQuote = trimmed.IndexOf('\"', 1);
             if (nextQuote > 1)
             {
-                candidate = trimmed[1..nextQuote];
-            }
-        }
-        else
-        {
-            int spaceIdx = trimmed.IndexOf(' ');
-            if (spaceIdx > 0)
-            {
-                candidate = trimmed[..spaceIdx];
+                candidate = trimmed[1..nextQuote].TrimEnd(',', ' ');
+                return ctx.MapPath(candidate);
             }
         }
 
-        return ctx.MapPath(candidate);
+        int spaceIdx = trimmed.IndexOf(' ');
+        if (spaceIdx > 0)
+        {
+            candidate = trimmed[..spaceIdx];
+        }
+
+        int commaIdx = candidate.IndexOf(',');
+        if (commaIdx > 0)
+        {
+            candidate = candidate[..commaIdx];
+        }
+
+        string mapped = ctx.MapPath(candidate.TrimEnd(',', ' '));
+        if (!File.Exists(mapped))
+        {
+            int fullCommaIdx = trimmed.IndexOf(',');
+            if (fullCommaIdx > 0)
+            {
+                string beforeComma = ctx.MapPath(trimmed[..fullCommaIdx].Trim());
+                if (File.Exists(beforeComma))
+                {
+                    return beforeComma;
+                }
+            }
+        }
+
+        return mapped;
     }
 
     public Result DisableEntry(ITargetContext ctx, BackupManager bm, AutorunEntry entry)
