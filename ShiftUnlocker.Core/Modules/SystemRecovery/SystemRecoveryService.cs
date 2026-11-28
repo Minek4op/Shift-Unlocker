@@ -123,6 +123,9 @@ public class SystemRecoveryService
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, IntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out IntPtr lpdwResult);
 
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern bool MoveFileEx(string lpExistingFileName, string? lpNewFileName, uint dwFlags);
+
     public Result RestoreDefaultTheme(ITargetContext ctx, BackupManager bm)
     {
         string aeroTheme = Path.Combine(ctx.WindowsDirectory, "Resources", "Themes", "aero.theme");
@@ -365,6 +368,23 @@ public class SystemRecoveryService
             {
                 if (File.Exists(destPath))
                 {
+                    // Если файл уже идентичен эталону — перезапись не нужна
+                    if (FilesHaveSameHash(sourcePath, destPath))
+                    {
+                        if (string.Equals(sourcePath, bakPath, StringComparison.OrdinalIgnoreCase))
+                        {
+                            try { File.Delete(bakPath); } catch { }
+                        }
+                        restoredCount++;
+                        bm.Log("Accessibility", $"{fileName} already matches reference ({sourcePath})");
+                        continue;
+                    }
+
+                    if (ctx.IsOnline)
+                    {
+                        KillProcessesByName(Path.GetFileNameWithoutExtension(fileName));
+                    }
+
                     bm.BackupFile(destPath);
                     fileMgr.TakeOwnershipOfPath(destPath);
                     RunCommandHidden("takeown.exe", $"/f \"{destPath}\" /A");
@@ -372,7 +392,19 @@ public class SystemRecoveryService
                     try { File.SetAttributes(destPath, FileAttributes.Normal); } catch { }
                 }
 
-                File.Copy(sourcePath, destPath, true);
+                try
+                {
+                    File.Copy(sourcePath, destPath, true);
+                }
+                catch (IOException) when (File.Exists(destPath))
+                {
+                    // Если файл занят процессом — переименовываем старый файл и ставим на удаление при перезагрузке
+                    string oldPath = $"{destPath}.old_{Guid.NewGuid().ToString("N")[..6]}";
+                    File.Move(destPath, oldPath, true);
+                    MoveFileEx(oldPath, null, 0x4 /* MOVEFILE_DELAY_UNTIL_REBOOT */);
+                    File.Copy(sourcePath, destPath, true);
+                }
+
                 if (string.Equals(sourcePath, bakPath, StringComparison.OrdinalIgnoreCase))
                 {
                     try { File.Delete(bakPath); } catch { }
@@ -392,6 +424,45 @@ public class SystemRecoveryService
         }
 
         return Result.Ok();
+    }
+
+    private static bool FilesHaveSameHash(string pathA, string pathB)
+    {
+        try
+        {
+            using var sha = System.Security.Cryptography.SHA256.Create();
+            using var fsA = File.OpenRead(pathA);
+            using var fsB = File.OpenRead(pathB);
+            byte[] hashA = sha.ComputeHash(fsA);
+            byte[] hashB = sha.ComputeHash(fsB);
+            return hashA.AsSpan().SequenceEqual(hashB);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static void KillProcessesByName(string procName)
+    {
+        try
+        {
+            int currentPid = Environment.ProcessId;
+            foreach (var p in Process.GetProcessesByName(procName))
+            {
+                try
+                {
+                    if (p.Id != currentPid)
+                    {
+                        p.Kill(entireProcessTree: true);
+                        p.WaitForExit(1500);
+                    }
+                }
+                catch { }
+                finally { p.Dispose(); }
+            }
+        }
+        catch { }
     }
 
     private static string? FindInWinSxS(string winSxS, string fileName)
