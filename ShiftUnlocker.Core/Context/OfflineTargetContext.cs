@@ -21,6 +21,8 @@ public class OfflineTargetContext : ITargetContext
 
     public IReadOnlyList<UserProfileInfo> UserProfiles => _userProfiles;
     public string? SelectedUserProfileName { get; private set; }
+    public bool IsSelectedProfileLoaded { get; private set; }
+    public string? ProfileLoadError { get; private set; }
 
     public OfflineTargetContext(string targetWindowsDir, string? preferredUserProfile = null)
     {
@@ -34,12 +36,29 @@ public class OfflineTargetContext : ITargetContext
         DetectCurrentControlSet();
         LoadUserProfiles();
 
-        if (!string.IsNullOrWhiteSpace(preferredUserProfile) && SelectUserProfile(preferredUserProfile))
+        if (!string.IsNullOrWhiteSpace(preferredUserProfile))
         {
+            if (!SelectUserProfile(preferredUserProfile))
+            {
+                SelectedUserProfileName = preferredUserProfile;
+                IsSelectedProfileLoaded = false;
+                ProfileLoadError = $"Не удалось загрузить куст HKCU для профиля '{preferredUserProfile}' (NTUSER.DAT заблокирован или повреждён). Операции с HKCU для этого профиля недоступны.";
+            }
             return;
         }
 
-        SelectedUserProfileName = _userProfiles.FirstOrDefault(u => !string.IsNullOrEmpty(u.LoadedHiveKey))?.UserName;
+        var firstLoaded = _userProfiles.FirstOrDefault(u => !string.IsNullOrEmpty(u.LoadedHiveKey));
+        if (firstLoaded != null)
+        {
+            SelectedUserProfileName = firstLoaded.UserName;
+            IsSelectedProfileLoaded = true;
+        }
+        else if (_userProfiles.Count > 0)
+        {
+            SelectedUserProfileName = _userProfiles[0].UserName;
+            IsSelectedProfileLoaded = false;
+            ProfileLoadError = "Ни один пользовательский куст HKCU (NTUSER.DAT) не удалось загрузить.";
+        }
     }
 
     public bool SelectUserProfile(string userName)
@@ -49,6 +68,8 @@ public class OfflineTargetContext : ITargetContext
             !string.IsNullOrEmpty(u.LoadedHiveKey));
         if (match == null) return false;
         SelectedUserProfileName = match.UserName;
+        IsSelectedProfileLoaded = true;
+        ProfileLoadError = null;
         return true;
     }
 
@@ -247,10 +268,14 @@ public class OfflineTargetContext : ITargetContext
 
         if (normHive is "HKCU" or "HKEY_CURRENT_USER")
         {
+            if (!IsSelectedProfileLoaded && !string.IsNullOrWhiteSpace(ProfileLoadError))
+            {
+                throw new InvalidOperationException(ProfileLoadError);
+            }
+
             var selectedUser = !string.IsNullOrWhiteSpace(SelectedUserProfileName)
                 ? _userProfiles.FirstOrDefault(u => u.UserName.Equals(SelectedUserProfileName, StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(u.LoadedHiveKey))
                 : null;
-            selectedUser ??= _userProfiles.FirstOrDefault(u => !string.IsNullOrEmpty(u.LoadedHiveKey));
             if (selectedUser?.LoadedHiveKey != null)
             {
                 return (Registry.Users, Path.Combine(selectedUser.LoadedHiveKey, cleanSubKey));
@@ -261,7 +286,7 @@ public class OfflineTargetContext : ITargetContext
                 return (Registry.LocalMachine, Path.Combine(defKey, cleanSubKey));
             }
 
-            return (Registry.CurrentUser, cleanSubKey);
+            throw new InvalidOperationException("Офлайн-куст HKCU не загружен.");
         }
 
         if (normHive is "HKCR" or "HKEY_CLASSES_ROOT")

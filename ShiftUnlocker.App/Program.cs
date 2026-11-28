@@ -76,8 +76,13 @@ static class Program
             // проверка на второй экземпляр
             try
             {
-                string mutexName = "Local\\SU_" + RandomLauncher.GenerateRandomName(12);
+                const string mutexName = "Local\\ShiftUnlocker_SingleInstance_Mutex";
                 _instanceMutex = new Mutex(true, mutexName, out bool createdNew);
+                if (!createdNew)
+                {
+                    MessageBox.Show("Shift Unlocker уже запущен.", "Shift Unlocker", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
             }
             catch
             {

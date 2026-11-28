@@ -11,6 +11,7 @@ public class BackupManagerUndoTests
     {
         private readonly Dictionary<string, Dictionary<string, (object Value, RegistryValueKind Kind)>> _store =
             new(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> _keys = new(StringComparer.OrdinalIgnoreCase);
 
         public bool IsOnline => false;
         public bool IsWinPE => false;
@@ -22,9 +23,14 @@ public class BackupManagerUndoTests
 
         private static string Key(string hive, string subKey) => $@"{hive}\{subKey}".TrimEnd('\\');
 
+        public void SeedEmptyKey(string hive, string subKey) => _keys.Add(Key(hive, subKey));
+
+        public bool KeyExists(string hive, string subKey) => _keys.Contains(Key(hive, subKey));
+
         public void Seed(string hive, string subKey, string name, object value, RegistryValueKind kind)
         {
             string k = Key(hive, subKey);
+            _keys.Add(k);
             if (!_store.TryGetValue(k, out var dict))
             {
                 dict = new Dictionary<string, (object, RegistryValueKind)>(StringComparer.OrdinalIgnoreCase);
@@ -49,6 +55,11 @@ public class BackupManagerUndoTests
                                                       x.StartsWith(prefix + @"\", StringComparison.OrdinalIgnoreCase)).ToList())
             {
                 _store.Remove(k);
+            }
+            foreach (var k in _keys.Where(x => x.Equals(prefix, StringComparison.OrdinalIgnoreCase) ||
+                                               x.StartsWith(prefix + @"\", StringComparison.OrdinalIgnoreCase)).ToList())
+            {
+                _keys.Remove(k);
             }
         }
 
@@ -75,7 +86,7 @@ public class BackupManagerUndoTests
         public string[] GetSubKeyNames(string rootHive, string subKey)
         {
             string prefix = Key(rootHive, subKey) + @"\";
-            return _store.Keys
+            return _keys
                 .Where(k => k.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
                 .Select(k => k[prefix.Length..].Split('\\')[0])
                 .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -123,6 +134,34 @@ public class BackupManagerUndoTests
         Assert.True(undo.Success);
         Assert.Equal(42, ctx.GetValue("HKCU", @"Software\Test", "Timeout"));
         Assert.Equal(RegistryValueKind.DWord, ctx.GetKind("HKCU", @"Software\Test", "Timeout"));
+
+        // Проверяем, что .reg-бэкап тоже сохранил dword:, а не строку
+        var regFiles = Directory.GetFiles(bm.SessionFolderPath, "reg_*.reg");
+        Assert.Single(regFiles);
+        string regText = File.ReadAllText(regFiles[0]);
+        Assert.Contains("dword:0000002a", regText, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void BackupAndDeleteSubKeyTree_UndoRestoresEmptyKeyAndNestedSubkeys()
+    {
+        var ctx = new InMemoryRegistryContext();
+        ctx.SeedEmptyKey("HKLM", @"Software\EmptyKey");
+        ctx.Seed("HKLM", @"Software\ParentKey\Child", "Num", 7, RegistryValueKind.DWord);
+        var bm = new BackupManager();
+
+        Assert.True(bm.BackupAndDeleteSubKeyTree(ctx, "HKLM", @"Software\EmptyKey", "Del empty").Success);
+        Assert.False(ctx.KeyExists("HKLM", @"Software\EmptyKey"));
+
+        Assert.True(bm.BackupAndDeleteSubKeyTree(ctx, "HKLM", @"Software\ParentKey", "Del parent").Success);
+        Assert.False(ctx.KeyExists("HKLM", @"Software\ParentKey\Child"));
+
+        Assert.True(bm.UndoLast().Success);
+        Assert.Equal(7, ctx.GetValue("HKLM", @"Software\ParentKey\Child", "Num"));
+        Assert.Equal(RegistryValueKind.DWord, ctx.GetKind("HKLM", @"Software\ParentKey\Child", "Num"));
+
+        Assert.True(bm.UndoLast().Success);
+        Assert.True(ctx.KeyExists("HKLM", @"Software\EmptyKey"));
     }
 
     [Fact]

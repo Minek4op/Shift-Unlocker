@@ -422,7 +422,12 @@ public class MainForm : Form
             }
             else
             {
-                _targetContext = new OfflineTargetContext(inst.WindowsDirectory, dlg.SelectedUserProfile);
+                var offlineCtx = new OfflineTargetContext(inst.WindowsDirectory, dlg.SelectedUserProfile);
+                _targetContext = offlineCtx;
+                if (!string.IsNullOrEmpty(offlineCtx.ProfileLoadError))
+                {
+                    MessageBox.Show(this, offlineCtx.ProfileLoadError, "Профиль HKCU недоступен", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
             }
 
             if (_views[0] is QuickScanView qv) qv.ResetScanState();
