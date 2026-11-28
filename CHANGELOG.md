@@ -1,5 +1,13 @@
 # Changelog
 
+## [Unreleased] — ЭТАП 2 (P2 и P3 функции)
+### Добавлено
+- **P2**: Редактор BCD (`BcdService`) с переключателями SafeMode (Minimal/Network), `bootstatuspolicy=ignoreallfailures` и перезагрузкой в WinRE.
+- **P2**: Помощник по шифровальщикам (`RansomwareHelperService`) с редактируемой базой расширений (`ransomware_extensions.json`), поиском записок о выкупе и просмотром теневых копий (`vssadmin`).
+- **P2**: Просмотр офлайн-журналов `.evtx`, сетевая диагностика (DNS/ARP/Route + сброс Winsock/TCP-IP) и очистка Temp/Prefetch/кэшей с предпросмотром размера (`DiagnosticsCleanupService`).
+- **P2**: Экспорт/импорт профилей лечения в JSON (`TreatmentProfileService`: «Локер с баннером», «Ярлыки на флешке», «Реклама в браузере»).
+- **P3**: Мини-сборщик обезличенного ZIP-пакета для форума (`ForumPackageService`), скриншот окна в журнал и базовое read-only чтение `$MFT` (`MftReaderService`).
+
 ## [Unreleased] — ЭТАП 2 (P1 функции)
 ### Добавлено
 - Расширенное сканирование автозагрузки в `AutorunService`: COM-hijack (`HKCU\...\CLSID`), AppCompat shims, Time Providers, Print Monitors, Winsock LSP, PowerShell-профили, переменные среды (`COR_PROFILER`, `__COMPAT_LAYER`).

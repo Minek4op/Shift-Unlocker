@@ -30,6 +30,11 @@ public class ToolsLogView : UserControl
     private readonly RoundedButton _btnAntiRootkit;
     private readonly RoundedButton _btnDataRescue;
     private readonly RoundedButton _btnGuard;
+    private readonly RoundedButton _btnRansomware;
+    private readonly RoundedButton _btnDiagNetCache;
+    private readonly RoundedButton _btnProfilesMft;
+    private readonly RoundedButton _btnForumZip;
+    private readonly RoundedButton _btnScreenshot;
 
     private readonly Label _lblStatus;
 
@@ -77,6 +82,11 @@ public class ToolsLogView : UserControl
         _btnAntiRootkit = new RoundedButton { Text = "Антируткит...", Size = new Size(130, 28), Margin = new Padding(2, 2, 6, 4) };
         _btnDataRescue = new RoundedButton { Text = "Спасение данных...", Size = new Size(160, 28), Margin = new Padding(2, 2, 6, 4) };
         _btnGuard = new RoundedButton { Text = "Страж (Guard): ВЫКЛ", Size = new Size(165, 28), Margin = new Padding(2, 2, 6, 4) };
+        _btnRansomware = new RoundedButton { Text = "Шифровальщики...", Size = new Size(150, 28), Margin = new Padding(2, 2, 6, 4) };
+        _btnDiagNetCache = new RoundedButton { Text = "EVTX / Сеть / Кэш...", Size = new Size(165, 28), Margin = new Padding(2, 2, 6, 4) };
+        _btnProfilesMft = new RoundedButton { Text = "Профили / MFT...", Size = new Size(145, 28), Margin = new Padding(2, 2, 6, 4) };
+        _btnForumZip = new RoundedButton { Text = "Пакет форума (ZIP)", Size = new Size(155, 28), Margin = new Padding(2, 2, 6, 4) };
+        _btnScreenshot = new RoundedButton { Text = "Скриншот в журнал", Size = new Size(155, 28), Margin = new Padding(2, 2, 6, 4) };
 
         _lblStatus = new Label { Text = "Готов к работе.", AutoSize = true, ForeColor = ThemeManager.TextMutedColor, Margin = new Padding(4, 7, 4, 4) };
 
@@ -85,6 +95,7 @@ public class ToolsLogView : UserControl
             lblProf, _btnDiagProfile, _btnSafeProfile, _btnFullProfile,
             lblTools, _btnResetHosts, _btnResetPolicies, _btnExportHtml, _btnExportTxt,
             _btnFrstReport, _btnSuScript, _btnDeepSearch, _btnBrowsers, _btnAntiRootkit, _btnDataRescue, _btnGuard,
+            _btnRansomware, _btnDiagNetCache, _btnProfilesMft, _btnForumZip, _btnScreenshot,
             _btnUndoLast, _btnUndoAll, _lblStatus
         });
 
@@ -152,6 +163,26 @@ public class ToolsLogView : UserControl
             if (ctx != null) new DataRescueDialog(ctx).ShowDialog(this);
         };
         _btnGuard.Click += (s, e) => ToggleGuard();
+        _btnRansomware.Click += (s, e) =>
+        {
+            var ctx = GetContext?.Invoke();
+            if (ctx != null) new RansomwareDialog(ctx).ShowDialog(this);
+        };
+        _btnDiagNetCache.Click += (s, e) =>
+        {
+            var ctx = GetContext?.Invoke();
+            if (ctx != null) new DiagnosticsCleanupDialog(ctx).ShowDialog(this);
+        };
+        _btnProfilesMft.Click += (s, e) =>
+        {
+            var ctx = GetContext?.Invoke();
+            var bm = GetBackupManager?.Invoke();
+            var qm = GetQuarantineManager?.Invoke();
+            if (ctx != null && bm != null && qm != null)
+                new ProfilesAndMftDialog(ctx, bm, qm, () => { RefreshLogs(); OnStateChanged?.Invoke(); }).ShowDialog(this);
+        };
+        _btnForumZip.Click += async (s, e) => await ExportForumZip();
+        _btnScreenshot.Click += (s, e) => CaptureWindowScreenshot();
 
         _guardService.OnKeyChanged += keyPath =>
         {
@@ -212,6 +243,45 @@ public class ToolsLogView : UserControl
         else
         {
             _lblStatus.Text = "Готов к работе.";
+        }
+    }
+
+    private async Task ExportForumZip()
+    {
+        var ctx = GetContext?.Invoke();
+        var bm = GetBackupManager?.Invoke();
+        if (ctx == null || bm == null) return;
+
+        using var sfd = new SaveFileDialog { Filter = "ZIP Archive (*.zip)|*.zip", FileName = $"SU_Forum_Package_{DateTime.Now:yyyyMMdd_HHmm}.zip" };
+        if (sfd.ShowDialog() != DialogResult.OK) return;
+
+        _lblStatus.Text = "Сборка пакета для форума...";
+        var res = await new ForumPackageService().CreateForumPackageZipAsync(ctx, bm, sfd.FileName);
+        _lblStatus.Text = res.Success ? "Пакет для форума создан." : "Ошибка сборки пакета.";
+        MessageBox.Show(res.Success ? $"ZIP-пакет (без личных данных) сохранён:\n{sfd.FileName}" : res.ErrorMessage, "Пакет для форума", MessageBoxButtons.OK, res.Success ? MessageBoxIcon.Information : MessageBoxIcon.Error);
+    }
+
+    private void CaptureWindowScreenshot()
+    {
+        var bm = GetBackupManager?.Invoke();
+        Form? form = FindForm();
+        if (form == null || bm == null) return;
+
+        try
+        {
+            string dir = Path.Combine(bm.SessionFolderPath, "screenshots");
+            Directory.CreateDirectory(dir);
+            string file = Path.Combine(dir, $"SU_Screen_{DateTime.Now:yyyyMMdd_HHmmss}.png");
+            using var bmp = new Bitmap(form.Width, form.Height);
+            form.DrawToBitmap(bmp, new Rectangle(0, 0, form.Width, form.Height));
+            bmp.Save(file, System.Drawing.Imaging.ImageFormat.Png);
+            bm.Log("Screenshot", $"Скриншот окна сохранён: {file}");
+            RefreshLogs();
+            MessageBox.Show($"Скриншот сохранён в журнал:\n{file}", "Скриншот", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Ошибка скриншота: {ex.Message}", "Скриншот", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
 

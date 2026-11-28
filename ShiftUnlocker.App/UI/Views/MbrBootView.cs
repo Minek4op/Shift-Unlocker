@@ -21,6 +21,7 @@ public class MbrBootView : UserControl
     private readonly RoundedButton _btnSfc;
     private readonly RoundedButton _btnDism;
     private readonly RoundedButton _btnDiskCleanup;
+    private readonly RoundedButton _btnBcdEditor;
 
     private readonly MbrBootService _mbrService = new();
     private List<PhysicalDriveInfo> _drives = new();
@@ -49,11 +50,12 @@ public class MbrBootView : UserControl
         _btnSfc = new RoundedButton { Text = "Offline SFC", Size = new Size(120, 30), Margin = new Padding(2, 2, 6, 4) };
         _btnDism = new RoundedButton { Text = "Offline DISM", Size = new Size(120, 30), Margin = new Padding(2, 2, 6, 4) };
         _btnDiskCleanup = new RoundedButton { Text = "💾 Удаление дисков...", Size = new Size(185, 30), Margin = new Padding(2, 2, 6, 4) };
+        _btnBcdEditor = new RoundedButton { Text = "BCD / SafeMode / WinRE...", Size = new Size(195, 30), Margin = new Padding(2, 2, 6, 4) };
 
         topPanel.Controls.AddRange(new Control[]
         {
             lblDrive, _cbDrives, _btnReadMbr, _btnBackupMbr, _btnRestoreMbr,
-            _btnBootsect, _btnBcdboot, _btnSfc, _btnDism, _btnDiskCleanup
+            _btnBootsect, _btnBcdboot, _btnSfc, _btnDism, _btnDiskCleanup, _btnBcdEditor
         });
 
         // слева hex-дамп, справа разбор разделов
@@ -122,6 +124,11 @@ public class MbrBootView : UserControl
         _btnSfc.Click += async (s, e) => await RunSfc();
         _btnDism.Click += async (s, e) => await RunDism();
         _btnDiskCleanup.Click += (s, e) => new DiskCleanupDialog().ShowDialog(this);
+        _btnBcdEditor.Click += (s, e) =>
+        {
+            var ctx = GetContext?.Invoke();
+            if (ctx != null) new BcdEditorDialog(ctx).ShowDialog(this);
+        };
 
         bool isAdmin = new System.Security.Principal.WindowsPrincipal(System.Security.Principal.WindowsIdentity.GetCurrent())
             .IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
@@ -133,6 +140,7 @@ public class MbrBootView : UserControl
         _btnSfc.Enabled = isAdmin;
         _btnDism.Enabled = isAdmin;
         _btnDiskCleanup.Enabled = isAdmin;
+        _btnBcdEditor.Enabled = isAdmin;
     }
 
     public void RefreshDrives()
