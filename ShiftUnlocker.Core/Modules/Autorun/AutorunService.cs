@@ -64,8 +64,63 @@ public class AutorunService
             ScanPowerShellProfiles(ctx, list);
             ScanSuspiciousEnvVars(ctx, list);
 
-            return list;
+            return DeduplicateEntries(list);
         }, ct);
+    }
+
+    private static readonly HashSet<string> GenericHosts = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "cmd.exe", "powershell.exe", "pwsh.exe", "wscript.exe", "cscript.exe",
+        "mshta.exe", "rundll32.exe", "regsvr32.exe", "svchost.exe", "conhost.exe"
+    };
+
+    /// <summary>
+    /// Убирает дубликаты записей автозагрузки по нормализованному пути файла
+    /// (или полной команде для системных интерпретаторов), сохраняя первый приоритетный источник.
+    /// </summary>
+    public static List<AutorunEntry> DeduplicateEntries(IEnumerable<AutorunEntry> entries)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var result = new List<AutorunEntry>();
+
+        foreach (var entry in entries)
+        {
+            string key = BuildDedupKey(entry);
+            if (seen.Add(key))
+            {
+                result.Add(entry);
+            }
+        }
+
+        return result;
+    }
+
+    private static string BuildDedupKey(AutorunEntry entry)
+    {
+        string resolved = (entry.ResolvedFilePath ?? string.Empty).Trim();
+        if (!string.IsNullOrEmpty(resolved))
+        {
+            string fileName = Path.GetFileName(resolved);
+            if (GenericHosts.Contains(fileName))
+            {
+                string normCmd = Regex.Replace((entry.Command ?? resolved).Trim(), @"\s+", " ");
+                return $"CMD:{normCmd}";
+            }
+
+            try
+            {
+                resolved = Path.GetFullPath(resolved);
+            }
+            catch
+            {
+                // оставляем исходный путь при недопустимых символах
+            }
+
+            return $"FILE:{resolved}";
+        }
+
+        string cmd = Regex.Replace((entry.Command ?? entry.Name ?? entry.Id).Trim(), @"\s+", " ");
+        return $"CMD:{cmd}";
     }
 
     private void ScanRegistryKey(ITargetContext ctx, string hive, string keyPath, string category, bool isEnabled, List<AutorunEntry> list)
